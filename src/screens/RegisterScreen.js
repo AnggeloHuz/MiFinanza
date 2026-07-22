@@ -10,40 +10,40 @@ import {
   Platform,
   ScrollView,
   Animated,
-  Dimensions,
   Pressable,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { useAuth } from '../context/AuthContext';
+import { createUser } from '../database/database';
 import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
 
 // Assets
 const logoClaro = require('../../assets/logo-claro.png');
 const logoOscuro = require('../../assets/logo-oscuro.png');
 
-const { width } = Dimensions.get('window');
-
-export default function LoginScreen({ onNavigateRegister }) {
+export default function RegisterScreen({ onNavigateLogin }) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
-  const { login, loginWithBiometric, isAuthenticating } = useAuth();
 
   // State
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [usernameFocused, setUsernameFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
+  const [confirmFocused, setConfirmFocused] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
 
   // Animations
   const logoAnim = useRef(new Animated.Value(0)).current;
   const titleAnim = useRef(new Animated.Value(0)).current;
   const cardAnim = useRef(new Animated.Value(0)).current;
   const cardSlide = useRef(new Animated.Value(40)).current;
-  const loginBtnScale = useRef(new Animated.Value(1)).current;
-  const bioBtnScale = useRef(new Animated.Value(1)).current;
+  const registerBtnScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.stagger(200, [
@@ -94,17 +94,71 @@ export default function LoginScreen({ onNavigateRegister }) {
     }).start();
   };
 
-  const handleLogin = async () => {
-    if (isAuthenticating) return;
-    await login(username, password);
+  const handleRegister = async () => {
+    if (isRegistering) return;
+
+    // Validaciones
+    if (!username.trim()) {
+      Alert.alert('Campo requerido', 'Por favor ingresa un nombre de usuario.');
+      return;
+    }
+
+    if (username.trim().length < 3) {
+      Alert.alert('Usuario inválido', 'El nombre de usuario debe tener al menos 3 caracteres.');
+      return;
+    }
+
+    if (!password.trim()) {
+      Alert.alert('Campo requerido', 'Por favor ingresa una contraseña.');
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Contraseña débil', 'La contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Las contraseñas no coinciden.');
+      return;
+    }
+
+    setIsRegistering(true);
+    try {
+      const result = await createUser(username.trim(), password);
+
+      if (result.success) {
+        Alert.alert(
+          '¡Registro exitoso!',
+          'Tu cuenta ha sido creada. Ahora puedes iniciar sesión.',
+          [
+            {
+              text: 'Iniciar Sesión',
+              onPress: () => onNavigateLogin(),
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Error de registro', result.message);
+      }
+    } catch (error) {
+      console.error('[Register] Error:', error);
+      Alert.alert('Error', 'Ocurrió un error al registrar. Intenta de nuevo.');
+    } finally {
+      setIsRegistering(false);
+    }
   };
 
-  const handleBiometric = async () => {
-    if (isAuthenticating) return;
-    await loginWithBiometric();
-  };
-
-
+  const getInputStyle = (isFocused) => ({
+    backgroundColor: theme.inputBackground,
+    borderColor: isFocused ? theme.inputBorderFocused : theme.inputBorder,
+    borderWidth: isFocused ? 1.5 : 1,
+    shadowColor: isFocused ? theme.inputBorderFocused : 'transparent',
+    shadowOpacity: isFocused ? 0.25 : 0,
+    shadowRadius: isFocused ? 8 : 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: isFocused ? 3 : 0,
+  });
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -161,7 +215,7 @@ export default function LoginScreen({ onNavigateRegister }) {
               },
             ]}
           >
-            Iniciar Sesión
+            Crear Cuenta
           </Animated.Text>
 
           {/* Form Card */}
@@ -181,40 +235,16 @@ export default function LoginScreen({ onNavigateRegister }) {
               <Text
                 style={[
                   styles.label,
-                  {
-                    color: theme.textPrimary,
-                    fontFamily: Fonts.medium,
-                  },
+                  { color: theme.textPrimary, fontFamily: Fonts.medium },
                 ]}
               >
                 Usuario
               </Text>
-              <View
-                style={[
-                  styles.inputWrapper,
-                  {
-                    backgroundColor: theme.inputBackground,
-                    borderColor: usernameFocused
-                      ? theme.inputBorderFocused
-                      : theme.inputBorder,
-                    borderWidth: usernameFocused ? 1.5 : 1,
-                    shadowColor: usernameFocused
-                      ? theme.inputBorderFocused
-                      : 'transparent',
-                    shadowOpacity: usernameFocused ? 0.25 : 0,
-                    shadowRadius: usernameFocused ? 8 : 0,
-                    shadowOffset: { width: 0, height: 0 },
-                    elevation: usernameFocused ? 3 : 0,
-                  },
-                ]}
-              >
+              <View style={[styles.inputWrapper, getInputStyle(usernameFocused)]}>
                 <TextInput
                   style={[
                     styles.input,
-                    {
-                      color: theme.textPrimary,
-                      fontFamily: Fonts.regular,
-                    },
+                    { color: theme.textPrimary, fontFamily: Fonts.regular },
                   ]}
                   placeholder="Nombre de usuario..."
                   placeholderTextColor={theme.placeholder}
@@ -224,7 +254,7 @@ export default function LoginScreen({ onNavigateRegister }) {
                   onBlur={() => setUsernameFocused(false)}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  editable={!isAuthenticating}
+                  editable={!isRegistering}
                 />
               </View>
             </View>
@@ -234,43 +264,19 @@ export default function LoginScreen({ onNavigateRegister }) {
               <Text
                 style={[
                   styles.label,
-                  {
-                    color: theme.textPrimary,
-                    fontFamily: Fonts.medium,
-                  },
+                  { color: theme.textPrimary, fontFamily: Fonts.medium },
                 ]}
               >
                 Contraseña
               </Text>
-              <View
-                style={[
-                  styles.inputWrapper,
-                  {
-                    backgroundColor: theme.inputBackground,
-                    borderColor: passwordFocused
-                      ? theme.inputBorderFocused
-                      : theme.inputBorder,
-                    borderWidth: passwordFocused ? 1.5 : 1,
-                    shadowColor: passwordFocused
-                      ? theme.inputBorderFocused
-                      : 'transparent',
-                    shadowOpacity: passwordFocused ? 0.25 : 0,
-                    shadowRadius: passwordFocused ? 8 : 0,
-                    shadowOffset: { width: 0, height: 0 },
-                    elevation: passwordFocused ? 3 : 0,
-                  },
-                ]}
-              >
+              <View style={[styles.inputWrapper, getInputStyle(passwordFocused)]}>
                 <TextInput
                   style={[
                     styles.input,
                     styles.passwordInput,
-                    {
-                      color: theme.textPrimary,
-                      fontFamily: Fonts.regular,
-                    },
+                    { color: theme.textPrimary, fontFamily: Fonts.regular },
                   ]}
-                  placeholder="••••••••••"
+                  placeholder="Mínimo 6 caracteres..."
                   placeholderTextColor={theme.placeholder}
                   value={password}
                   onChangeText={setPassword}
@@ -279,132 +285,140 @@ export default function LoginScreen({ onNavigateRegister }) {
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  editable={!isAuthenticating}
+                  editable={!isRegistering}
                 />
                 <Pressable
                   onPress={() => setShowPassword(!showPassword)}
                   style={styles.eyeButton}
                   hitSlop={8}
                 >
-                  <Text
-                    style={[
-                      styles.eyeIcon,
-                      { color: theme.textSecondary },
-                    ]}
-                  >
+                  <Text style={[styles.eyeIcon, { color: theme.textSecondary }]}>
                     {showPassword ? '🙈' : '👁️'}
                   </Text>
                 </Pressable>
               </View>
             </View>
 
-            {/* Login Button */}
+            {/* Confirm Password Field */}
+            <View style={styles.fieldContainer}>
+              <Text
+                style={[
+                  styles.label,
+                  { color: theme.textPrimary, fontFamily: Fonts.medium },
+                ]}
+              >
+                Confirmar Contraseña
+              </Text>
+              <View style={[styles.inputWrapper, getInputStyle(confirmFocused)]}>
+                <TextInput
+                  style={[
+                    styles.input,
+                    styles.passwordInput,
+                    { color: theme.textPrimary, fontFamily: Fonts.regular },
+                  ]}
+                  placeholder="Repite tu contraseña..."
+                  placeholderTextColor={theme.placeholder}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  onFocus={() => setConfirmFocused(true)}
+                  onBlur={() => setConfirmFocused(false)}
+                  secureTextEntry={!showConfirmPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!isRegistering}
+                />
+                <Pressable
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={styles.eyeButton}
+                  hitSlop={8}
+                >
+                  <Text style={[styles.eyeIcon, { color: theme.textSecondary }]}>
+                    {showConfirmPassword ? '🙈' : '👁️'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Rol Info */}
+            <View
+              style={[
+                styles.rolInfo,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(26, 171, 138, 0.1)'
+                    : 'rgba(26, 171, 138, 0.08)',
+                  borderColor: isDark
+                    ? 'rgba(26, 171, 138, 0.25)'
+                    : 'rgba(26, 171, 138, 0.2)',
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.rolInfoText,
+                  { color: theme.accent, fontFamily: Fonts.regular },
+                ]}
+              >
+                👤 Se te asignará el rol de Usuario
+              </Text>
+            </View>
+
+            {/* Register Button */}
             <Animated.View
-              style={{ transform: [{ scale: loginBtnScale }] }}
+              style={{ transform: [{ scale: registerBtnScale }] }}
             >
               <Pressable
-                onPressIn={() => handlePressIn(loginBtnScale)}
-                onPressOut={() => handlePressOut(loginBtnScale)}
-                onPress={handleLogin}
-                disabled={isAuthenticating}
+                onPressIn={() => handlePressIn(registerBtnScale)}
+                onPressOut={() => handlePressOut(registerBtnScale)}
+                onPress={handleRegister}
+                disabled={isRegistering}
                 style={[
-                  styles.loginButton,
+                  styles.registerButton,
                   {
                     backgroundColor: theme.accent,
-                    opacity: isAuthenticating ? 0.7 : 1,
+                    opacity: isRegistering ? 0.7 : 1,
                   },
                 ]}
               >
-                {isAuthenticating ? (
+                {isRegistering ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
                   <>
                     <Text
                       style={[
-                        styles.loginButtonText,
+                        styles.registerButtonText,
                         { fontFamily: Fonts.bold },
                       ]}
                     >
-                      Iniciar Sesión
+                      Registrarse
                     </Text>
-                    <Text style={styles.loginButtonIcon}>➤</Text>
+                    <Text style={styles.registerButtonIcon}>✓</Text>
                   </>
                 )}
               </Pressable>
             </Animated.View>
 
-            {/* Biometric Button */}
-            <Animated.View
-              style={{ transform: [{ scale: bioBtnScale }] }}
-            >
-              <Pressable
-                onPressIn={() => handlePressIn(bioBtnScale)}
-                onPressOut={() => handlePressOut(bioBtnScale)}
-                onPress={handleBiometric}
-                disabled={isAuthenticating}
-                style={[
-                  styles.bioButton,
-                  {
-                    backgroundColor: theme.bioBtnBackground,
-                    borderColor: isDark
-                      ? 'rgba(26, 171, 138, 0.3)'
-                      : 'transparent',
-                    borderWidth: isDark ? 1 : 0,
-                    opacity: isAuthenticating ? 0.7 : 1,
-                  },
-                ]}
-              >
-                {isAuthenticating ? (
-                  <ActivityIndicator
-                    color={theme.bioBtnText}
-                    size="small"
-                  />
-                ) : (
-                  <>
-                    <Text
-                      style={[
-                        styles.bioButtonText,
-                        {
-                          color: theme.bioBtnText,
-                          fontFamily: Fonts.medium,
-                        },
-                      ]}
-                    >
-                      Biométrica
-                    </Text>
-                    <Text style={styles.bioButtonIcon}>🔐</Text>
-                  </>
-                )}
-              </Pressable>
-            </Animated.View>
-
-            {/* Register Link */}
+            {/* Back to Login Link */}
             <Pressable
-              onPress={onNavigateRegister}
-              style={styles.registerLinkContainer}
-              disabled={isAuthenticating}
+              onPress={onNavigateLogin}
+              style={styles.linkContainer}
+              disabled={isRegistering}
             >
               <Text
                 style={[
-                  styles.registerLinkText,
-                  {
-                    color: theme.textSecondary,
-                    fontFamily: Fonts.regular,
-                  },
+                  styles.linkText,
+                  { color: theme.textSecondary, fontFamily: Fonts.regular },
                 ]}
               >
-                ¿No tienes cuenta?{' '}
+                ¿Ya tienes cuenta?{' '}
               </Text>
               <Text
                 style={[
-                  styles.registerLinkBold,
-                  {
-                    color: theme.linkColor,
-                    fontFamily: Fonts.bold,
-                  },
+                  styles.linkTextBold,
+                  { color: theme.linkColor, fontFamily: Fonts.bold },
                 ]}
               >
-                Regístrate
+                Iniciar Sesión
               </Text>
             </Pressable>
           </Animated.View>
@@ -441,15 +455,15 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   logo: {
-    width: 140,
-    height: 140,
+    width: 110,
+    height: 110,
   },
   title: {
     fontSize: 28,
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.lg,
     textAlign: 'center',
     letterSpacing: 0.3,
   },
@@ -465,7 +479,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   fieldContainer: {
-    marginBottom: Spacing.md + 4,
+    marginBottom: Spacing.md,
   },
   label: {
     fontSize: 15,
@@ -496,54 +510,50 @@ const styles = StyleSheet.create({
   eyeIcon: {
     fontSize: 18,
   },
-  loginButton: {
+  rolInfo: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm + 2,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+    alignItems: 'center',
+  },
+  rolInfoText: {
+    fontSize: 13,
+    letterSpacing: 0.2,
+  },
+  registerButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 15,
     borderRadius: BorderRadius.sm,
-    marginTop: Spacing.sm,
+    marginTop: Spacing.xs,
     minHeight: 50,
   },
-  loginButtonText: {
+  registerButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     letterSpacing: 0.5,
   },
-  loginButtonIcon: {
+  registerButtonIcon: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 18,
     marginLeft: Spacing.sm,
+    fontWeight: 'bold',
   },
-  bioButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 15,
-    borderRadius: BorderRadius.sm,
-    marginTop: Spacing.sm + 4,
-    minHeight: 50,
-  },
-  bioButtonText: {
-    fontSize: 16,
-    letterSpacing: 0.5,
-  },
-  bioButtonIcon: {
-    fontSize: 16,
-    marginLeft: Spacing.sm,
-  },
-  registerLinkContainer: {
+  linkContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: Spacing.md + 4,
     paddingVertical: Spacing.sm,
   },
-  registerLinkText: {
+  linkText: {
     fontSize: 14,
     letterSpacing: 0.2,
   },
-  registerLinkBold: {
+  linkTextBold: {
     fontSize: 14,
     letterSpacing: 0.2,
   },

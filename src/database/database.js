@@ -83,3 +83,37 @@ export async function getUserByUsername(usuario) {
 
   return user || null;
 }
+
+/**
+ * Crea un nuevo usuario en la base de datos.
+ * El rol siempre será 'usuario' (solo admin tiene rol 'administrador').
+ * @param {string} usuario - Nombre de usuario
+ * @param {string} contrasena - Contraseña
+ * @returns {Object} Resultado con success y message
+ */
+export async function createUser(usuario, contrasena) {
+  const database = await getDB();
+
+  // Verificar si el usuario ya existe
+  const existing = await database.getFirstAsync(
+    'SELECT id FROM users WHERE usuario = ?',
+    [usuario]
+  );
+
+  if (existing) {
+    return { success: false, message: 'El nombre de usuario ya está en uso.' };
+  }
+
+  // Crear el usuario con rol fijo 'usuario'
+  const result = await database.runAsync(
+    'INSERT INTO users (usuario, contrasena, rol) VALUES (?, ?, ?)',
+    [usuario, contrasena, 'usuario']
+  );
+
+  console.log('[DB] Nuevo usuario creado:', usuario);
+  return {
+    success: true,
+    message: 'Usuario registrado exitosamente.',
+    userId: result.lastInsertRowId,
+  };
+}

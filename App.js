@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator, useColorScheme } from 'react-native';
 import { useFonts } from 'expo-font';
 import {
@@ -9,6 +9,7 @@ import {
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import LoginScreen from './src/screens/LoginScreen';
+import RegisterScreen from './src/screens/RegisterScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import { Colors } from './src/constants/theme';
 
@@ -16,10 +17,11 @@ import { Colors } from './src/constants/theme';
 SplashScreen.preventAutoHideAsync();
 
 /**
- * Componente navegador que renderiza Login o Home según autenticación.
+ * Componente navegador que renderiza Login, Register o Home según estado.
  */
 function AppNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
+  const [currentScreen, setCurrentScreen] = useState('login');
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
@@ -38,7 +40,25 @@ function AppNavigator() {
     );
   }
 
-  return isAuthenticated ? <HomeScreen /> : <LoginScreen />;
+  // Si está autenticado, siempre mostrar Home
+  if (isAuthenticated) {
+    return <HomeScreen />;
+  }
+
+  // Navegación entre Login y Register
+  if (currentScreen === 'register') {
+    return (
+      <RegisterScreen
+        onNavigateLogin={() => setCurrentScreen('login')}
+      />
+    );
+  }
+
+  return (
+    <LoginScreen
+      onNavigateRegister={() => setCurrentScreen('register')}
+    />
+  );
 }
 
 export default function App() {
