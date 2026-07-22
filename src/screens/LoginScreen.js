@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
   StyleSheet,
   Image,
   useColorScheme,
@@ -13,8 +12,10 @@ import {
   Animated,
   Dimensions,
   Pressable,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { useAuth } from '../context/AuthContext';
 import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
 
 // Assets
@@ -27,6 +28,7 @@ export default function LoginScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
+  const { login, loginWithBiometric, isAuthenticating } = useAuth();
 
   // State
   const [username, setUsername] = useState('');
@@ -92,14 +94,14 @@ export default function LoginScreen() {
     }).start();
   };
 
-  const handleLogin = () => {
-    // TODO: Implementar lógica de autenticación
-    console.log('Login:', { username, password });
+  const handleLogin = async () => {
+    if (isAuthenticating) return;
+    await login(username, password);
   };
 
-  const handleBiometric = () => {
-    // TODO: Implementar autenticación biométrica con expo-local-authentication
-    console.log('Biometric auth requested');
+  const handleBiometric = async () => {
+    if (isAuthenticating) return;
+    await loginWithBiometric();
   };
 
   const handleForgotPassword = () => {
@@ -225,6 +227,7 @@ export default function LoginScreen() {
                   onBlur={() => setUsernameFocused(false)}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  editable={!isAuthenticating}
                 />
               </View>
             </View>
@@ -279,6 +282,7 @@ export default function LoginScreen() {
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  editable={!isAuthenticating}
                 />
                 <Pressable
                   onPress={() => setShowPassword(!showPassword)}
@@ -305,20 +309,30 @@ export default function LoginScreen() {
                 onPressIn={() => handlePressIn(loginBtnScale)}
                 onPressOut={() => handlePressOut(loginBtnScale)}
                 onPress={handleLogin}
+                disabled={isAuthenticating}
                 style={[
                   styles.loginButton,
-                  { backgroundColor: theme.accent },
+                  {
+                    backgroundColor: theme.accent,
+                    opacity: isAuthenticating ? 0.7 : 1,
+                  },
                 ]}
               >
-                <Text
-                  style={[
-                    styles.loginButtonText,
-                    { fontFamily: Fonts.bold },
-                  ]}
-                >
-                  Iniciar Sesión
-                </Text>
-                <Text style={styles.loginButtonIcon}>➤</Text>
+                {isAuthenticating ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <>
+                    <Text
+                      style={[
+                        styles.loginButtonText,
+                        { fontFamily: Fonts.bold },
+                      ]}
+                    >
+                      Iniciar Sesión
+                    </Text>
+                    <Text style={styles.loginButtonIcon}>➤</Text>
+                  </>
+                )}
               </Pressable>
             </Animated.View>
 
@@ -330,6 +344,7 @@ export default function LoginScreen() {
                 onPressIn={() => handlePressIn(bioBtnScale)}
                 onPressOut={() => handlePressOut(bioBtnScale)}
                 onPress={handleBiometric}
+                disabled={isAuthenticating}
                 style={[
                   styles.bioButton,
                   {
@@ -338,21 +353,31 @@ export default function LoginScreen() {
                       ? 'rgba(26, 171, 138, 0.3)'
                       : 'transparent',
                     borderWidth: isDark ? 1 : 0,
+                    opacity: isAuthenticating ? 0.7 : 1,
                   },
                 ]}
               >
-                <Text
-                  style={[
-                    styles.bioButtonText,
-                    {
-                      color: theme.bioBtnText,
-                      fontFamily: Fonts.medium,
-                    },
-                  ]}
-                >
-                  Biométrica
-                </Text>
-                <Text style={styles.bioButtonIcon}>🔐</Text>
+                {isAuthenticating ? (
+                  <ActivityIndicator
+                    color={theme.bioBtnText}
+                    size="small"
+                  />
+                ) : (
+                  <>
+                    <Text
+                      style={[
+                        styles.bioButtonText,
+                        {
+                          color: theme.bioBtnText,
+                          fontFamily: Fonts.medium,
+                        },
+                      ]}
+                    >
+                      Biométrica
+                    </Text>
+                    <Text style={styles.bioButtonIcon}>🔐</Text>
+                  </>
+                )}
               </Pressable>
             </Animated.View>
 
@@ -360,6 +385,7 @@ export default function LoginScreen() {
             <Pressable
               onPress={handleForgotPassword}
               style={styles.forgotContainer}
+              disabled={isAuthenticating}
             >
               <Text
                 style={[
@@ -458,6 +484,7 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderRadius: BorderRadius.sm,
     marginTop: Spacing.sm,
+    minHeight: 50,
   },
   loginButtonText: {
     color: '#FFFFFF',
@@ -476,6 +503,7 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderRadius: BorderRadius.sm,
     marginTop: Spacing.sm + 4,
+    minHeight: 50,
   },
   bioButtonText: {
     fontSize: 16,
