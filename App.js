@@ -1,18 +1,43 @@
-import "./global.css";
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useCallback } from 'react';
+import { View, StyleSheet } from 'react-native';
+import { useFonts } from 'expo-font';
+import {
+  Roboto_400Regular,
+  Roboto_500Medium,
+  Roboto_700Bold,
+} from '@expo-google-fonts/roboto';
+import * as SplashScreen from 'expo-splash-screen';
+import LoginScreen from './src/screens/LoginScreen';
+
+// Mantener la splash screen visible mientras se cargan las fuentes
+SplashScreen.preventAutoHideAsync();
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    Roboto_400Regular,
+    Roboto_500Medium,
+    Roboto_700Bold,
+  });
+
+  const onLayoutRootView = useCallback(async () => {
+    if (fontsLoaded) {
+      await SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
-    <View className="flex-1 items-center justify-center bg-slate-900">
-      <Text className="text-white text-2xl font-bold">
-        ¡Tailwind funcionando! 🚀
-      </Text>
-      <View className="mt-4 p-4 bg-amber-400 rounded-lg shadow-lg">
-        <Text className="text-amber-900">Este es un componente con clases</Text>
-      </View>
-      <StatusBar style="light" />
+    <View style={styles.root} onLayout={onLayoutRootView}>
+      <LoginScreen />
     </View>
   );
 }
 
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+});
