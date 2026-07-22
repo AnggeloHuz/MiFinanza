@@ -11,16 +11,17 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import HomeScreen from './src/screens/HomeScreen';
+import AdminScreen from './src/screens/AdminScreen';
 import { Colors } from './src/constants/theme';
 
 // Mantener la splash screen visible mientras se cargan las fuentes
 SplashScreen.preventAutoHideAsync();
 
 /**
- * Componente navegador que renderiza Login, Register o Home según estado.
+ * Componente navegador que renderiza Login, Register o Admin/Home según estado y rol.
  */
 function AppNavigator() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const [currentScreen, setCurrentScreen] = useState('login');
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -40,10 +41,14 @@ function AppNavigator() {
     );
   }
 
-  // Si está autenticado, siempre mostrar Home
+  // Si está autenticado, renderizar según el rol
   if (isAuthenticated) {
+    if (user?.rol === 'administrador') {
+      return <AdminScreen />;
+    }
     return <HomeScreen />;
   }
+
 
   // Navegación entre Login y Register
   if (currentScreen === 'register') {

@@ -117,3 +117,50 @@ export async function createUser(usuario, contrasena) {
     userId: result.lastInsertRowId,
   };
 }
+
+/**
+ * Obtiene todos los usuarios registrados en la base de datos.
+ * @returns {Array} Lista de usuarios
+ */
+export async function getAllUsers() {
+  const database = await getDB();
+  const users = await database.getAllAsync(
+    'SELECT id, usuario, rol, created_at FROM users ORDER BY id DESC'
+  );
+  return users || [];
+}
+
+/**
+ * Elimina un usuario de la base de datos por su ID.
+ * @param {number} userId - ID del usuario a eliminar
+ * @returns {Object} Resultado de la operación
+ */
+export async function deleteUser(userId) {
+  const database = await getDB();
+  
+  // Evitar eliminar al admin base si es necesario, aunque la validación se hace en UI
+  const user = await database.getFirstAsync('SELECT rol FROM users WHERE id = ?', [userId]);
+  if (user && user.rol === 'administrador') {
+    return { success: false, message: 'No se puede eliminar a un administrador principal.' };
+  }
+  
+  await database.runAsync('DELETE FROM users WHERE id = ?', [userId]);
+  return { success: true, message: 'Usuario eliminado exitosamente.' };
+}
+
+/**
+ * Actualiza la contraseña de un usuario.
+ * @param {number} userId - ID del usuario
+ * @param {string} newPassword - Nueva contraseña
+ * @returns {Object} Resultado de la operación
+ */
+export async function updateUserPassword(userId, newPassword) {
+  const database = await getDB();
+  
+  await database.runAsync(
+    'UPDATE users SET contrasena = ? WHERE id = ?',
+    [newPassword, userId]
+  );
+  
+  return { success: true, message: 'Contraseña actualizada exitosamente.' };
+}
