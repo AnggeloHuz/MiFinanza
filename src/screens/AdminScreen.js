@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated, useColorScheme, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../context/AuthContext';
-import { getAllUsers } from '../database/database';
+import { getAllUsers, getAllBilleteras } from '../database/database';
 import { Colors } from '../constants/theme';
 
 // Componentes modulares
@@ -24,6 +24,7 @@ export default function AdminScreen() {
   // Pestaña activa
   const [activeTab, setActiveTab] = useState('usuarios');
   const [usersList, setUsersList] = useState([]);
+  const [billeterasList, setBilleterasList] = useState([]);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
 
   // Animaciones de transición
@@ -33,6 +34,7 @@ export default function AdminScreen() {
 
   useEffect(() => {
     fetchUsers();
+    fetchBilleteras();
   }, []);
 
   const fetchUsers = async () => {
@@ -41,6 +43,15 @@ export default function AdminScreen() {
       setUsersList(data);
     } catch (e) {
       console.error('Error al cargar usuarios:', e);
+    }
+  };
+
+  const fetchBilleteras = async () => {
+    try {
+      const data = await getAllBilleteras();
+      setBilleterasList(data);
+    } catch (e) {
+      console.error('Error al cargar billeteras:', e);
     }
   };
 
@@ -158,7 +169,7 @@ export default function AdminScreen() {
           <UsuariosView usersList={usersList} isDark={isDark} onRefresh={fetchUsers} />
         )}
         {activeTab === 'billeteras' && (
-          <BilleterasView isDark={isDark} />
+          <BilleterasView isDark={isDark} billeterasList={billeterasList} onRefresh={fetchBilleteras} />
         )}
         {activeTab === 'movimientos' && (
           <MovimientosView isDark={isDark} />

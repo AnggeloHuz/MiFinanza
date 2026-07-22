@@ -34,6 +34,18 @@ export async function initDatabase() {
     );
   `);
 
+  // Crear tabla de billeteras
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS billeteras (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nombre TEXT NOT NULL,
+      moneda TEXT NOT NULL,
+      moneda_abreviatura TEXT NOT NULL,
+      codigo TEXT NOT NULL DEFAULT 'Sin código',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // Insertar usuario semilla si no existe
   const existingUser = await database.getFirstAsync(
     'SELECT id FROM users WHERE usuario = ?',
@@ -163,4 +175,79 @@ export async function updateUserPassword(userId, newPassword) {
   );
   
   return { success: true, message: 'Contraseña actualizada exitosamente.' };
+}
+
+// ============================================================
+// BILLETERAS - CRUD
+// ============================================================
+
+/**
+ * Crea una nueva billetera en la base de datos.
+ * @param {string} nombre - Nombre de la billetera
+ * @param {string} moneda - Nombre completo de la moneda
+ * @param {string} monedaAbreviatura - Abreviatura (VES, USD, EUR)
+ * @param {string} codigo - Código bancario o 'Sin código'
+ * @returns {Object} Resultado con success y message
+ */
+export async function createBilletera(nombre, moneda, monedaAbreviatura, codigo) {
+  const database = await getDB();
+
+  const result = await database.runAsync(
+    'INSERT INTO billeteras (nombre, moneda, moneda_abreviatura, codigo) VALUES (?, ?, ?, ?)',
+    [nombre, moneda, monedaAbreviatura, codigo || 'Sin código']
+  );
+
+  console.log('[DB] Nueva billetera creada:', nombre);
+  return {
+    success: true,
+    message: 'Billetera creada exitosamente.',
+    billeteraId: result.lastInsertRowId,
+  };
+}
+
+/**
+ * Obtiene todas las billeteras registradas.
+ * @returns {Array} Lista de billeteras
+ */
+export async function getAllBilleteras() {
+  const database = await getDB();
+  const billeteras = await database.getAllAsync(
+    'SELECT id, nombre, moneda, moneda_abreviatura, codigo, created_at FROM billeteras ORDER BY id DESC'
+  );
+  return billeteras || [];
+}
+
+/**
+ * Actualiza una billetera existente.
+ * @param {number} billeteraId - ID de la billetera
+ * @param {string} nombre - Nuevo nombre
+ * @param {string} moneda - Nueva moneda
+ * @param {string} monedaAbreviatura - Nueva abreviatura
+ * @param {string} codigo - Nuevo código
+ * @returns {Object} Resultado de la operación
+ */
+export async function updateBilletera(billeteraId, nombre, moneda, monedaAbreviatura, codigo) {
+  const database = await getDB();
+
+  await database.runAsync(
+    'UPDATE billeteras SET nombre = ?, moneda = ?, moneda_abreviatura = ?, codigo = ? WHERE id = ?',
+    [nombre, moneda, monedaAbreviatura, codigo || 'Sin código', billeteraId]
+  );
+
+  return { success: true, message: 'Billetera actualizada exitosamente.' };
+}
+
+/**
+ * Elimina una billetera y todos los datos asociados a ella.
+ * @param {number} billeteraId - ID de la billetera a eliminar
+ * @returns {Object} Resultado de la operación
+ */
+export async function deleteBilletera(billeteraId) {
+  const database = await getDB();
+
+  // A futuro aquí se borrarán movimientos y datos asociados
+  // await database.runAsync('DELETE FROM movimientos WHERE billetera_id = ?', [billeteraId]);
+
+  await database.runAsync('DELETE FROM billeteras WHERE id = ?', [billeteraId]);
+  return { success: true, message: 'Billetera eliminada exitosamente.' };
 }
