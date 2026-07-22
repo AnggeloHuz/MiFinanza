@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated, useColorScheme, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../context/AuthContext';
-import { getAllUsers, getAllBilleteras } from '../database/database';
+import { getAllUsers, getAllBilleteras, getAllTiposMovimiento } from '../database/database';
 import { Colors } from '../constants/theme';
 
 // Componentes modulares
@@ -25,6 +25,7 @@ export default function AdminScreen() {
   const [activeTab, setActiveTab] = useState('usuarios');
   const [usersList, setUsersList] = useState([]);
   const [billeterasList, setBilleterasList] = useState([]);
+  const [tiposMovimientoList, setTiposMovimientoList] = useState([]);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
 
   // Animaciones de transición
@@ -35,6 +36,7 @@ export default function AdminScreen() {
   useEffect(() => {
     fetchUsers();
     fetchBilleteras();
+    fetchTiposMovimiento();
   }, []);
 
   const fetchUsers = async () => {
@@ -52,6 +54,15 @@ export default function AdminScreen() {
       setBilleterasList(data);
     } catch (e) {
       console.error('Error al cargar billeteras:', e);
+    }
+  };
+
+  const fetchTiposMovimiento = async () => {
+    try {
+      const data = await getAllTiposMovimiento();
+      setTiposMovimientoList(data);
+    } catch (e) {
+      console.error('Error al cargar tipos de movimiento:', e);
     }
   };
 
@@ -172,7 +183,7 @@ export default function AdminScreen() {
           <BilleterasView isDark={isDark} billeterasList={billeterasList} onRefresh={fetchBilleteras} />
         )}
         {activeTab === 'movimientos' && (
-          <MovimientosView isDark={isDark} />
+          <MovimientosView isDark={isDark} tiposMovimientoList={tiposMovimientoList} onRefresh={fetchTiposMovimiento} />
         )}
       </Animated.View>
 

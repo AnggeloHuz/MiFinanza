@@ -46,6 +46,16 @@ export async function initDatabase() {
     );
   `);
 
+  // Crear tabla de tipos de movimiento
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS tipos_movimiento (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tipo TEXT NOT NULL,
+      nombre TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // Insertar usuario semilla si no existe
   const existingUser = await database.getFirstAsync(
     'SELECT id FROM users WHERE usuario = ?',
@@ -250,4 +260,72 @@ export async function deleteBilletera(billeteraId) {
 
   await database.runAsync('DELETE FROM billeteras WHERE id = ?', [billeteraId]);
   return { success: true, message: 'Billetera eliminada exitosamente.' };
+}
+
+// ============================================================
+// TIPOS DE MOVIMIENTO - CRUD
+// ============================================================
+
+/**
+ * Crea un nuevo tipo de movimiento.
+ * @param {string} tipo - 'Ingreso' o 'Egreso'
+ * @param {string} nombre - Nombre del tipo de movimiento
+ * @returns {Object} Resultado con success y message
+ */
+export async function createTipoMovimiento(tipo, nombre) {
+  const database = await getDB();
+
+  const result = await database.runAsync(
+    'INSERT INTO tipos_movimiento (tipo, nombre) VALUES (?, ?)',
+    [tipo, nombre]
+  );
+
+  console.log('[DB] Nuevo tipo de movimiento creado:', nombre);
+  return {
+    success: true,
+    message: 'Tipo de movimiento creado exitosamente.',
+    tipoMovimientoId: result.lastInsertRowId,
+  };
+}
+
+/**
+ * Obtiene todos los tipos de movimiento.
+ * @returns {Array} Lista de tipos de movimiento
+ */
+export async function getAllTiposMovimiento() {
+  const database = await getDB();
+  const tipos = await database.getAllAsync(
+    'SELECT id, tipo, nombre, created_at FROM tipos_movimiento ORDER BY id DESC'
+  );
+  return tipos || [];
+}
+
+/**
+ * Actualiza un tipo de movimiento existente.
+ * @param {number} tipoId - ID del tipo de movimiento
+ * @param {string} tipo - 'Ingreso' o 'Egreso'
+ * @param {string} nombre - Nuevo nombre
+ * @returns {Object} Resultado de la operación
+ */
+export async function updateTipoMovimiento(tipoId, tipo, nombre) {
+  const database = await getDB();
+
+  await database.runAsync(
+    'UPDATE tipos_movimiento SET tipo = ?, nombre = ? WHERE id = ?',
+    [tipo, nombre, tipoId]
+  );
+
+  return { success: true, message: 'Tipo de movimiento actualizado exitosamente.' };
+}
+
+/**
+ * Elimina un tipo de movimiento sin borrar datos asociados.
+ * @param {number} tipoId - ID del tipo de movimiento a eliminar
+ * @returns {Object} Resultado de la operación
+ */
+export async function deleteTipoMovimiento(tipoId) {
+  const database = await getDB();
+
+  await database.runAsync('DELETE FROM tipos_movimiento WHERE id = ?', [tipoId]);
+  return { success: true, message: 'Tipo de movimiento eliminado exitosamente.' };
 }
