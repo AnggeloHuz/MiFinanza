@@ -2,44 +2,36 @@ import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
-import BilleteraFormView from './BilleteraFormView';
-import BilleteraDetailView from './BilleteraDetailView';
+import MovimientoFormView from './MovimientoFormView';
+import MovimientoDetailView from './MovimientoDetailView';
 
-// Colores por moneda para el avatar de la tarjeta
-const MONEDA_COLORS = {
-  VES: '#3B82F6',
-  USD: '#10B981',
-  EUR: '#8B5CF6',
-};
-
-export default function BilleterasView({ isDark, billeterasList, onRefresh, userId }) {
+export default function TiposMovimientoView({ isDark, tiposMovimientoList, onRefresh, userId, onBackMenu }) {
   const theme = isDark ? Colors.dark : Colors.light;
 
-  const [selectedBilletera, setSelectedBilletera] = useState(null);
+  const [selectedTipo, setSelectedTipo] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Filtrado en tiempo real
-  const filteredBilleteras = useMemo(() => {
-    if (!searchQuery.trim()) return billeterasList;
+  const filteredTipos = useMemo(() => {
+    if (!searchQuery.trim()) return tiposMovimientoList;
     const lowerQuery = searchQuery.toLowerCase();
-    return billeterasList.filter(
-      (b) =>
-        b.nombre.toLowerCase().includes(lowerQuery) ||
-        b.moneda_abreviatura.toLowerCase().includes(lowerQuery) ||
-        b.codigo.toLowerCase().includes(lowerQuery) ||
-        b.id.toString().includes(lowerQuery)
+    return tiposMovimientoList.filter(
+      (t) =>
+        t.nombre.toLowerCase().includes(lowerQuery) ||
+        t.tipo.toLowerCase().includes(lowerQuery) ||
+        t.id.toString().includes(lowerQuery)
     );
-  }, [searchQuery, billeterasList]);
+  }, [searchQuery, tiposMovimientoList]);
 
-  // Si se seleccionó una billetera → mostrar detalle (Stack)
-  if (selectedBilletera) {
+  // Si se seleccionó un tipo → mostrar detalle (Stack)
+  if (selectedTipo) {
     return (
-      <BilleteraDetailView
-        billetera={selectedBilletera}
+      <MovimientoDetailView
+        tipoMovimiento={selectedTipo}
         isDark={isDark}
         userId={userId}
-        onBack={() => setSelectedBilletera(null)}
+        onBack={() => setSelectedTipo(null)}
         onRefresh={onRefresh}
       />
     );
@@ -48,7 +40,7 @@ export default function BilleterasView({ isDark, billeterasList, onRefresh, user
   // Si se presionó "Agregar" → mostrar formulario
   if (showAddForm) {
     return (
-      <BilleteraFormView
+      <MovimientoFormView
         isDark={isDark}
         userId={userId}
         onBack={() => setShowAddForm(false)}
@@ -65,7 +57,7 @@ export default function BilleterasView({ isDark, billeterasList, onRefresh, user
         <Ionicons name="search" size={20} color={theme.textSecondary} style={styles.searchIcon} />
         <TextInput
           style={[styles.searchInput, { color: theme.textPrimary }]}
-          placeholder="Buscar por nombre, moneda o código..."
+          placeholder="Buscar por nombre o tipo..."
           placeholderTextColor={theme.textSecondary}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -83,13 +75,16 @@ export default function BilleterasView({ isDark, billeterasList, onRefresh, user
       >
         {/* Header de sección */}
         <View style={styles.cardHeaderRow}>
-          <Text style={[styles.cardHeaderTitle, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
-            Billeteras Registradas
-          </Text>
-          <View style={[styles.countBadge, { backgroundColor: theme.accent }]}>
-            <Text style={styles.countBadgeText}>{filteredBilleteras.length}</Text>
-          </View>
+        <TouchableOpacity onPress={onBackMenu} style={{ marginRight: 10, padding: 5 }}>
+          <Ionicons name="arrow-back" size={20} color={theme.textPrimary} />
+        </TouchableOpacity>
+        <Text style={[styles.cardHeaderTitle, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
+          Tipos de Movimientos Registrados
+        </Text>
+        <View style={[styles.countBadge, { backgroundColor: theme.accent, marginLeft: 'auto' }]}>
+          <Text style={styles.countBadgeText}>{filteredTipos.length}</Text>
         </View>
+      </View>
 
         {/* Botón Agregar */}
         <TouchableOpacity
@@ -105,28 +100,29 @@ export default function BilleterasView({ isDark, billeterasList, onRefresh, user
         >
           <Ionicons name="add-circle-outline" size={22} color={theme.accent} />
           <Text style={[styles.addBtnText, { color: theme.accent, fontFamily: Fonts.medium }]}>
-            Agregar Nueva Billetera
+            Agregar Nuevo Tipo de Movimiento
           </Text>
         </TouchableOpacity>
 
-        {/* Lista de billeteras */}
-        {filteredBilleteras.length === 0 ? (
+        {/* Lista de tipos de movimiento */}
+        {filteredTipos.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="wallet-outline" size={42} color={theme.textSecondary} />
+            <Ionicons name="swap-vertical-outline" size={42} color={theme.textSecondary} />
             <Text style={[styles.emptyText, { color: theme.textSecondary, fontFamily: Fonts.medium }]}>
-              {searchQuery ? 'No se encontraron billeteras.' : 'No hay billeteras registradas aún.'}
+              {searchQuery ? 'No se encontraron tipos de movimiento.' : 'No hay tipos de movimiento registrados aún.'}
             </Text>
           </View>
         ) : (
-          filteredBilleteras.map((item) => {
-            const avatarColor = MONEDA_COLORS[item.moneda_abreviatura] || theme.accent;
+          filteredTipos.map((item) => {
+            const isIngreso = item.tipo === 'Ingreso';
+            const tipoColor = isIngreso ? '#10B981' : '#EF4444';
             return (
               <TouchableOpacity
                 activeOpacity={0.7}
-                onPress={() => setSelectedBilletera(item)}
+                onPress={() => setSelectedTipo(item)}
                 key={item.id.toString()}
                 style={[
-                  styles.billeteraCard,
+                  styles.tipoCard,
                   {
                     backgroundColor: theme.cardBackground,
                     shadowColor: theme.cardShadow,
@@ -134,30 +130,34 @@ export default function BilleterasView({ isDark, billeterasList, onRefresh, user
                   },
                 ]}
               >
-                <View style={[styles.billeteraAvatar, { backgroundColor: avatarColor }]}>
-                  <Text style={styles.billeteraAvatarText}>{item.moneda_abreviatura}</Text>
+                <View style={[styles.tipoAvatar, { backgroundColor: tipoColor }]}>
+                  <Ionicons
+                    name={isIngreso ? 'arrow-down-circle' : 'arrow-up-circle'}
+                    size={24}
+                    color="#FFF"
+                  />
                 </View>
 
-                <View style={styles.billeteraInfo}>
-                  <Text style={[styles.billeteraNameText, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
+                <View style={styles.tipoInfo}>
+                  <Text style={[styles.tipoNameText, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
                     {item.nombre}
                   </Text>
-                  <Text style={[styles.billeteraSubText, { color: theme.textSecondary, fontFamily: Fonts.regular }]}>
-                    {item.codigo !== 'Sin código' ? `Código: ${item.codigo}` : 'Sin código bancario'}
+                  <Text style={[styles.tipoSubText, { color: theme.textSecondary, fontFamily: Fonts.regular }]}>
+                    ID #{item.id}
                   </Text>
                 </View>
 
                 <View
                   style={[
-                    styles.monedaBadge,
+                    styles.tipoBadge,
                     {
-                      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-                      borderColor: theme.inputBorder,
+                      backgroundColor: tipoColor + '20',
+                      borderColor: tipoColor,
                     },
                   ]}
                 >
-                  <Text style={[styles.monedaBadgeText, { color: theme.textSecondary, fontFamily: Fonts.medium }]}>
-                    {item.moneda_abreviatura}
+                  <Text style={[styles.tipoBadgeText, { color: tipoColor, fontFamily: Fonts.medium }]}>
+                    {item.tipo}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
-  billeteraCard: {
+  tipoCard: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: Spacing.md,
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
   },
-  billeteraAvatar: {
+  tipoAvatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -262,29 +262,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: Spacing.md,
   },
-  billeteraAvatarText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: 'bold',
-    letterSpacing: 0.5,
-  },
-  billeteraInfo: {
+  tipoInfo: {
     flex: 1,
   },
-  billeteraNameText: {
+  tipoNameText: {
     fontSize: 16,
     marginBottom: 2,
   },
-  billeteraSubText: {
+  tipoSubText: {
     fontSize: 12,
   },
-  monedaBadge: {
+  tipoBadge: {
     paddingHorizontal: Spacing.sm + 2,
     paddingVertical: 4,
     borderRadius: BorderRadius.full,
     borderWidth: 1,
   },
-  monedaBadgeText: {
+  tipoBadgeText: {
     fontSize: 12,
   },
 });

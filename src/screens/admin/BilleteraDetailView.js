@@ -8,7 +8,7 @@ import BilleteraFormView from './BilleteraFormView';
 /**
  * Vista detallada de una billetera con opciones de editar y eliminar.
  */
-export default function BilleteraDetailView({ billetera, isDark, onBack, onRefresh }) {
+export default function BilleteraDetailView({ billetera, isDark, onBack, onRefresh, userId }) {
   const theme = isDark ? Colors.dark : Colors.light;
   const [showEditForm, setShowEditForm] = useState(false);
 
@@ -51,6 +51,7 @@ export default function BilleteraDetailView({ billetera, isDark, onBack, onRefre
       <BilleteraFormView
         isDark={isDark}
         billetera={billetera}
+        userId={userId}
         onBack={() => setShowEditForm(false)}
         onSaved={() => {
           setShowEditForm(false);

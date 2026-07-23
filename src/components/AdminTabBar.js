@@ -4,7 +4,7 @@ import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
 
 export const TABS = [
-  { id: 'usuarios', label: 'Usuarios', icon: 'show-chart', type: 'material' },
+  { id: 'dashboard', label: 'Dashboard', icon: 'show-chart', type: 'material' },
   { id: 'billeteras', label: 'Billeteras', icon: 'account-balance', type: 'material' },
   { id: 'movimientos', label: 'Movimientos', icon: 'hand-holding-usd', type: 'font-awesome-5' },
   { id: 'opciones', label: 'Opciones', icon: 'grid-view', type: 'material' },

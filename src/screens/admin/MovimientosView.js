@@ -1,164 +1,96 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
-import MovimientoFormView from './MovimientoFormView';
-import MovimientoDetailView from './MovimientoDetailView';
+import TiposMovimientoView from './TiposMovimientoView';
 
-export default function MovimientosView({ isDark, tiposMovimientoList, onRefresh }) {
+export default function MovimientosView({ isDark, tiposMovimientoList, onRefresh, userId }) {
   const theme = isDark ? Colors.dark : Colors.light;
+  
+  // 'menu' | 'tipos' | 'historial'
+  const [currentView, setCurrentView] = useState('menu');
 
-  const [selectedTipo, setSelectedTipo] = useState(null);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Filtrado en tiempo real
-  const filteredTipos = useMemo(() => {
-    if (!searchQuery.trim()) return tiposMovimientoList;
-    const lowerQuery = searchQuery.toLowerCase();
-    return tiposMovimientoList.filter(
-      (t) =>
-        t.nombre.toLowerCase().includes(lowerQuery) ||
-        t.tipo.toLowerCase().includes(lowerQuery) ||
-        t.id.toString().includes(lowerQuery)
-    );
-  }, [searchQuery, tiposMovimientoList]);
-
-  // Si se seleccionó un tipo → mostrar detalle (Stack)
-  if (selectedTipo) {
+  if (currentView === 'tipos') {
     return (
-      <MovimientoDetailView
-        tipoMovimiento={selectedTipo}
-        isDark={isDark}
-        onBack={() => setSelectedTipo(null)}
-        onRefresh={onRefresh}
+      <TiposMovimientoView 
+        isDark={isDark} 
+        tiposMovimientoList={tiposMovimientoList} 
+        onRefresh={onRefresh} 
+        userId={userId} 
+        onBackMenu={() => setCurrentView('menu')}
       />
     );
   }
 
-  // Si se presionó "Agregar" → mostrar formulario
-  if (showAddForm) {
+  if (currentView === 'historial') {
     return (
-      <MovimientoFormView
-        isDark={isDark}
-        onBack={() => setShowAddForm(false)}
-        onSaved={onRefresh}
-      />
+      <View style={styles.container}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => setCurrentView('menu')} style={{ marginRight: 10, padding: 5 }}>
+            <Ionicons name="arrow-back" size={20} color={theme.textPrimary} />
+          </TouchableOpacity>
+          <Text style={[styles.title, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
+            Historial de Movimientos
+          </Text>
+        </View>
+        <View style={styles.placeholderContainer}>
+          <Ionicons name="construct-outline" size={48} color={theme.textSecondary} />
+          <Text style={[styles.placeholderText, { color: theme.textSecondary, fontFamily: Fonts.medium }]}>
+            El historial de movimientos estará disponible próximamente.
+          </Text>
+        </View>
+      </View>
     );
   }
 
-  // VISTA DE LISTA
+  // MENÚ PRINCIPAL DE MOVIMIENTOS
   return (
     <View style={styles.container}>
-      {/* Buscador */}
-      <View style={[styles.searchContainer, { backgroundColor: theme.cardBackground, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
-        <Ionicons name="search" size={20} color={theme.textSecondary} style={styles.searchIcon} />
-        <TextInput
-          style={[styles.searchInput, { color: theme.textPrimary }]}
-          placeholder="Buscar por nombre o tipo..."
-          placeholderTextColor={theme.textSecondary}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearBtn}>
-            <Ionicons name="close-circle" size={20} color={theme.textSecondary} />
-          </TouchableOpacity>
-        )}
-      </View>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollPadding}>
+        <Text style={[styles.menuTitle, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
+          Gestión de Movimientos
+        </Text>
+        <Text style={[styles.menuSubtitle, { color: theme.textSecondary, fontFamily: Fonts.regular }]}>
+          Seleccione una opción para continuar
+        </Text>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollPadding}
-      >
-        {/* Header de sección */}
-        <View style={styles.cardHeaderRow}>
-          <Text style={[styles.cardHeaderTitle, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
-            Tipos de Movimiento
-          </Text>
-          <View style={[styles.countBadge, { backgroundColor: theme.accent }]}>
-            <Text style={styles.countBadgeText}>{filteredTipos.length}</Text>
-          </View>
-        </View>
-
-        {/* Botón Agregar */}
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() => setShowAddForm(true)}
-          style={[
-            styles.addBtn,
-            {
-              backgroundColor: isDark ? 'rgba(26, 171, 138, 0.15)' : 'rgba(26, 171, 138, 0.1)',
-              borderColor: theme.accent,
-            },
-          ]}
+        <TouchableOpacity 
+          activeOpacity={0.8}
+          style={[styles.menuCard, { backgroundColor: theme.cardBackground, borderColor: theme.inputBorder }]}
+          onPress={() => setCurrentView('tipos')}
         >
-          <Ionicons name="add-circle-outline" size={22} color={theme.accent} />
-          <Text style={[styles.addBtnText, { color: theme.accent, fontFamily: Fonts.medium }]}>
-            Agregar Nuevo Tipo de Movimiento
-          </Text>
-        </TouchableOpacity>
-
-        {/* Lista de tipos de movimiento */}
-        {filteredTipos.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="swap-vertical-outline" size={42} color={theme.textSecondary} />
-            <Text style={[styles.emptyText, { color: theme.textSecondary, fontFamily: Fonts.medium }]}>
-              {searchQuery ? 'No se encontraron tipos de movimiento.' : 'No hay tipos de movimiento registrados aún.'}
+          <View style={[styles.iconBox, { backgroundColor: isDark ? 'rgba(26, 171, 138, 0.15)' : 'rgba(26, 171, 138, 0.1)' }]}>
+            <Ionicons name="list-outline" size={28} color={theme.accent} />
+          </View>
+          <View style={styles.cardTextContainer}>
+            <Text style={[styles.cardTitle, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
+              Tipos de Movimiento
+            </Text>
+            <Text style={[styles.cardDescription, { color: theme.textSecondary, fontFamily: Fonts.regular }]}>
+              Cree o edite categorías como ingresos, egresos, salarios, compras, etc.
             </Text>
           </View>
-        ) : (
-          filteredTipos.map((item) => {
-            const isIngreso = item.tipo === 'Ingreso';
-            const tipoColor = isIngreso ? '#10B981' : '#EF4444';
-            return (
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={() => setSelectedTipo(item)}
-                key={item.id.toString()}
-                style={[
-                  styles.tipoCard,
-                  {
-                    backgroundColor: theme.cardBackground,
-                    shadowColor: theme.cardShadow,
-                    borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
-                  },
-                ]}
-              >
-                <View style={[styles.tipoAvatar, { backgroundColor: tipoColor }]}>
-                  <Ionicons
-                    name={isIngreso ? 'arrow-down-circle' : 'arrow-up-circle'}
-                    size={24}
-                    color="#FFF"
-                  />
-                </View>
+          <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+        </TouchableOpacity>
 
-                <View style={styles.tipoInfo}>
-                  <Text style={[styles.tipoNameText, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
-                    {item.nombre}
-                  </Text>
-                  <Text style={[styles.tipoSubText, { color: theme.textSecondary, fontFamily: Fonts.regular }]}>
-                    ID #{item.id}
-                  </Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.tipoBadge,
-                    {
-                      backgroundColor: tipoColor + '20',
-                      borderColor: tipoColor,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.tipoBadgeText, { color: tipoColor, fontFamily: Fonts.medium }]}>
-                    {item.tipo}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })
-        )}
+        <TouchableOpacity 
+          activeOpacity={0.8}
+          style={[styles.menuCard, { backgroundColor: theme.cardBackground, borderColor: theme.inputBorder }]}
+          onPress={() => setCurrentView('historial')}
+        >
+          <View style={[styles.iconBox, { backgroundColor: isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.1)' }]}>
+            <FontAwesome5 name="exchange-alt" size={24} color="#3B82F6" />
+          </View>
+          <View style={styles.cardTextContainer}>
+            <Text style={[styles.cardTitle, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
+              Movimientos
+            </Text>
+            <Text style={[styles.cardDescription, { color: theme.textSecondary, fontFamily: Fonts.regular }]}>
+              Registre, vea y gestione sus transacciones e intercambios reales.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -168,112 +100,70 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: Spacing.lg,
-    marginTop: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    height: 48,
-  },
-  searchIcon: {
-    marginRight: Spacing.sm,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    height: '100%',
-  },
-  clearBtn: {
-    padding: Spacing.xs,
-  },
   scrollPadding: {
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
+    paddingTop: Spacing.xl,
     paddingBottom: 100,
   },
-  cardHeaderRow: {
+  menuTitle: {
+    fontSize: 22,
+    marginBottom: 4,
+  },
+  menuSubtitle: {
+    fontSize: 14,
+    marginBottom: Spacing.xl,
+  },
+  menuCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.md,
-  },
-  cardHeaderTitle: {
-    fontSize: 16,
-    letterSpacing: 0.2,
-  },
-  countBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: BorderRadius.full,
-  },
-  countBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: BorderRadius.sm,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    marginBottom: Spacing.lg,
-    gap: Spacing.sm,
-  },
-  addBtnText: {
-    fontSize: 15,
-  },
-  emptyContainer: {
-    padding: Spacing.xxl,
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  emptyText: {
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  tipoCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.md,
+    padding: Spacing.lg,
     borderRadius: BorderRadius.md,
-    marginBottom: Spacing.md,
     borderWidth: 1,
-    elevation: 3,
-    shadowOffset: { width: 0, height: 3 },
+    marginBottom: Spacing.md,
+    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowRadius: 4,
   },
-  tipoAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  iconBox: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: Spacing.md,
   },
-  tipoInfo: {
+  cardTextContainer: {
     flex: 1,
+    paddingRight: Spacing.sm,
   },
-  tipoNameText: {
+  cardTitle: {
     fontSize: 16,
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  tipoSubText: {
+  cardDescription: {
     fontSize: 12,
+    lineHeight: 18,
   },
-  tipoBadge: {
-    paddingHorizontal: Spacing.sm + 2,
-    paddingVertical: 4,
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.md,
   },
-  tipoBadgeText: {
-    fontSize: 12,
+  title: {
+    fontSize: 18,
+  },
+  placeholderContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.xl,
+  },
+  placeholderText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: Spacing.md,
   },
 });

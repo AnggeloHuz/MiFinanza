@@ -10,18 +10,17 @@ import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
-import HomeScreen from './src/screens/HomeScreen';
-import AdminScreen from './src/screens/AdminScreen';
+import MainScreen from './src/screens/MainScreen';
 import { Colors } from './src/constants/theme';
 
 // Mantener la splash screen visible mientras se cargan las fuentes
 SplashScreen.preventAutoHideAsync();
 
 /**
- * Componente navegador que renderiza Login, Register o Admin/Home según estado y rol.
+ * Componente navegador que renderiza Login, Register o MainScreen según estado de autenticación.
  */
 function AppNavigator() {
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const [currentScreen, setCurrentScreen] = useState('login');
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -41,14 +40,10 @@ function AppNavigator() {
     );
   }
 
-  // Si está autenticado, renderizar según el rol
+  // Si está autenticado, todos van a MainScreen
   if (isAuthenticated) {
-    if (user?.rol === 'administrador') {
-      return <AdminScreen />;
-    }
-    return <HomeScreen />;
+    return <MainScreen />;
   }
-
 
   // Navegación entre Login y Register
   if (currentScreen === 'register') {

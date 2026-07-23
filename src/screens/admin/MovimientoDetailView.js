@@ -9,7 +9,7 @@ import MovimientoFormView from './MovimientoFormView';
 /**
  * Vista detallada de un tipo de movimiento con opciones de editar y eliminar.
  */
-export default function MovimientoDetailView({ tipoMovimiento, isDark, onBack, onRefresh }) {
+export default function MovimientoDetailView({ tipoMovimiento, isDark, onBack, onRefresh, userId }) {
   const theme = isDark ? Colors.dark : Colors.light;
   const [showEditForm, setShowEditForm] = useState(false);
 
@@ -46,6 +46,7 @@ export default function MovimientoDetailView({ tipoMovimiento, isDark, onBack, o
       <MovimientoFormView
         isDark={isDark}
         tipoMovimiento={tipoMovimiento}
+        userId={userId}
         onBack={() => setShowEditForm(false)}
         onSaved={() => {
           setShowEditForm(false);

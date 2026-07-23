@@ -10,7 +10,7 @@ const TIPOS = ['Ingreso', 'Egreso'];
  * Formulario reutilizable para Agregar o Editar un tipo de movimiento.
  * Si se pasa `tipoMovimiento`, entra en modo edición. Si no, modo creación.
  */
-export default function MovimientoFormView({ isDark, tipoMovimiento, onBack, onSaved }) {
+export default function MovimientoFormView({ isDark, tipoMovimiento, onBack, onSaved, userId }) {
   const theme = isDark ? Colors.dark : Colors.light;
   const isEditing = !!tipoMovimiento;
 
@@ -35,7 +35,7 @@ export default function MovimientoFormView({ isDark, tipoMovimiento, onBack, onS
       if (isEditing) {
         result = await updateTipoMovimiento(tipoMovimiento.id, tipoSeleccionado, nombre.trim());
       } else {
-        result = await createTipoMovimiento(tipoSeleccionado, nombre.trim());
+        result = await createTipoMovimiento(userId, tipoSeleccionado, nombre.trim());
       }
 
       if (result.success) {

@@ -18,7 +18,7 @@ export async function getDB() {
 }
 
 /**
- * Inicializa la base de datos: crea tablas e inserta datos semilla.
+ * Inicializa la base de datos: crea tablas, migra esquema y datos semilla.
  */
 export async function initDatabase() {
   const database = await getDB();
@@ -34,25 +34,29 @@ export async function initDatabase() {
     );
   `);
 
-  // Crear tabla de billeteras
+  // Crear tabla de billeteras (con user_id)
   await database.execAsync(`
     CREATE TABLE IF NOT EXISTS billeteras (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL DEFAULT 0,
       nombre TEXT NOT NULL,
       moneda TEXT NOT NULL,
       moneda_abreviatura TEXT NOT NULL,
       codigo TEXT NOT NULL DEFAULT 'Sin código',
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
     );
   `);
 
-  // Crear tabla de tipos de movimiento
+  // Crear tabla de tipos de movimiento (con user_id)
   await database.execAsync(`
     CREATE TABLE IF NOT EXISTS tipos_movimiento (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL DEFAULT 0,
       tipo TEXT NOT NULL,
       nombre TEXT NOT NULL,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
     );
   `);
 
@@ -65,13 +69,65 @@ export async function initDatabase() {
   if (!existingUser) {
     await database.runAsync(
       'INSERT INTO users (usuario, contrasena, rol) VALUES (?, ?, ?)',
-      ['admin', 'admin123', 'administrador']
+      ['admin', 'admin123', 'usuario']
     );
     console.log('[DB] Usuario semilla "admin" creado exitosamente');
   }
 
+  // Migrar rol de admin existente a 'usuario'
+  await database.runAsync(
+    "UPDATE users SET rol = 'usuario' WHERE rol = 'administrador'"
+  );
+
+  // Migrar datos existentes sin user_id al usuario admin
+  await migrateOrphanedData(database);
+
   console.log('[DB] Base de datos inicializada correctamente');
 }
+
+/**
+ * Migra billeteras y tipos_movimiento sin user_id al usuario "admin".
+ * Solo afecta registros con user_id = 0 (datos antiguos).
+ */
+async function migrateOrphanedData(database) {
+  const adminUser = await database.getFirstAsync(
+    'SELECT id FROM users WHERE usuario = ?',
+    ['admin']
+  );
+
+  if (!adminUser) return;
+
+  const adminId = adminUser.id;
+
+  // Agregar columna user_id si no existe (migración para tablas creadas sin ella)
+  try {
+    await database.execAsync('ALTER TABLE billeteras ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0');
+  } catch (e) {
+    // La columna ya existe, ignorar
+  }
+
+  try {
+    await database.execAsync('ALTER TABLE tipos_movimiento ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0');
+  } catch (e) {
+    // La columna ya existe, ignorar
+  }
+
+  // Asignar registros huérfanos (user_id = 0) al usuario admin
+  await database.runAsync(
+    'UPDATE billeteras SET user_id = ? WHERE user_id = 0',
+    [adminId]
+  );
+  await database.runAsync(
+    'UPDATE tipos_movimiento SET user_id = ? WHERE user_id = 0',
+    [adminId]
+  );
+
+  console.log('[DB] Datos huérfanos migrados al usuario admin (id:', adminId, ')');
+}
+
+// ============================================================
+// USUARIOS
+// ============================================================
 
 /**
  * Valida las credenciales de un usuario contra la base de datos.
@@ -108,7 +164,6 @@ export async function getUserByUsername(usuario) {
 
 /**
  * Crea un nuevo usuario en la base de datos.
- * El rol siempre será 'usuario' (solo admin tiene rol 'administrador').
  * @param {string} usuario - Nombre de usuario
  * @param {string} contrasena - Contraseña
  * @returns {Object} Resultado con success y message
@@ -141,36 +196,6 @@ export async function createUser(usuario, contrasena) {
 }
 
 /**
- * Obtiene todos los usuarios registrados en la base de datos.
- * @returns {Array} Lista de usuarios
- */
-export async function getAllUsers() {
-  const database = await getDB();
-  const users = await database.getAllAsync(
-    'SELECT id, usuario, rol, created_at FROM users ORDER BY id DESC'
-  );
-  return users || [];
-}
-
-/**
- * Elimina un usuario de la base de datos por su ID.
- * @param {number} userId - ID del usuario a eliminar
- * @returns {Object} Resultado de la operación
- */
-export async function deleteUser(userId) {
-  const database = await getDB();
-  
-  // Evitar eliminar al admin base si es necesario, aunque la validación se hace en UI
-  const user = await database.getFirstAsync('SELECT rol FROM users WHERE id = ?', [userId]);
-  if (user && user.rol === 'administrador') {
-    return { success: false, message: 'No se puede eliminar a un administrador principal.' };
-  }
-  
-  await database.runAsync('DELETE FROM users WHERE id = ?', [userId]);
-  return { success: true, message: 'Usuario eliminado exitosamente.' };
-}
-
-/**
  * Actualiza la contraseña de un usuario.
  * @param {number} userId - ID del usuario
  * @param {string} newPassword - Nueva contraseña
@@ -188,23 +213,24 @@ export async function updateUserPassword(userId, newPassword) {
 }
 
 // ============================================================
-// BILLETERAS - CRUD
+// BILLETERAS - CRUD (filtradas por user_id)
 // ============================================================
 
 /**
- * Crea una nueva billetera en la base de datos.
+ * Crea una nueva billetera asociada a un usuario.
+ * @param {number} userId - ID del usuario propietario
  * @param {string} nombre - Nombre de la billetera
  * @param {string} moneda - Nombre completo de la moneda
  * @param {string} monedaAbreviatura - Abreviatura (VES, USD, EUR)
  * @param {string} codigo - Código bancario o 'Sin código'
  * @returns {Object} Resultado con success y message
  */
-export async function createBilletera(nombre, moneda, monedaAbreviatura, codigo) {
+export async function createBilletera(userId, nombre, moneda, monedaAbreviatura, codigo) {
   const database = await getDB();
 
   const result = await database.runAsync(
-    'INSERT INTO billeteras (nombre, moneda, moneda_abreviatura, codigo) VALUES (?, ?, ?, ?)',
-    [nombre, moneda, monedaAbreviatura, codigo || 'Sin código']
+    'INSERT INTO billeteras (user_id, nombre, moneda, moneda_abreviatura, codigo) VALUES (?, ?, ?, ?, ?)',
+    [userId, nombre, moneda, monedaAbreviatura, codigo || 'Sin código']
   );
 
   console.log('[DB] Nueva billetera creada:', nombre);
@@ -216,13 +242,15 @@ export async function createBilletera(nombre, moneda, monedaAbreviatura, codigo)
 }
 
 /**
- * Obtiene todas las billeteras registradas.
- * @returns {Array} Lista de billeteras
+ * Obtiene todas las billeteras de un usuario.
+ * @param {number} userId - ID del usuario
+ * @returns {Array} Lista de billeteras del usuario
  */
-export async function getAllBilleteras() {
+export async function getAllBilleteras(userId) {
   const database = await getDB();
   const billeteras = await database.getAllAsync(
-    'SELECT id, nombre, moneda, moneda_abreviatura, codigo, created_at FROM billeteras ORDER BY id DESC'
+    'SELECT id, user_id, nombre, moneda, moneda_abreviatura, codigo, created_at FROM billeteras WHERE user_id = ? ORDER BY id DESC',
+    [userId]
   );
   return billeteras || [];
 }
@@ -263,21 +291,22 @@ export async function deleteBilletera(billeteraId) {
 }
 
 // ============================================================
-// TIPOS DE MOVIMIENTO - CRUD
+// TIPOS DE MOVIMIENTO - CRUD (filtrados por user_id)
 // ============================================================
 
 /**
- * Crea un nuevo tipo de movimiento.
+ * Crea un nuevo tipo de movimiento asociado a un usuario.
+ * @param {number} userId - ID del usuario propietario
  * @param {string} tipo - 'Ingreso' o 'Egreso'
  * @param {string} nombre - Nombre del tipo de movimiento
  * @returns {Object} Resultado con success y message
  */
-export async function createTipoMovimiento(tipo, nombre) {
+export async function createTipoMovimiento(userId, tipo, nombre) {
   const database = await getDB();
 
   const result = await database.runAsync(
-    'INSERT INTO tipos_movimiento (tipo, nombre) VALUES (?, ?)',
-    [tipo, nombre]
+    'INSERT INTO tipos_movimiento (user_id, tipo, nombre) VALUES (?, ?, ?)',
+    [userId, tipo, nombre]
   );
 
   console.log('[DB] Nuevo tipo de movimiento creado:', nombre);
@@ -289,13 +318,15 @@ export async function createTipoMovimiento(tipo, nombre) {
 }
 
 /**
- * Obtiene todos los tipos de movimiento.
- * @returns {Array} Lista de tipos de movimiento
+ * Obtiene todos los tipos de movimiento de un usuario.
+ * @param {number} userId - ID del usuario
+ * @returns {Array} Lista de tipos de movimiento del usuario
  */
-export async function getAllTiposMovimiento() {
+export async function getAllTiposMovimiento(userId) {
   const database = await getDB();
   const tipos = await database.getAllAsync(
-    'SELECT id, tipo, nombre, created_at FROM tipos_movimiento ORDER BY id DESC'
+    'SELECT id, user_id, tipo, nombre, created_at FROM tipos_movimiento WHERE user_id = ? ORDER BY id DESC',
+    [userId]
   );
   return tipos || [];
 }

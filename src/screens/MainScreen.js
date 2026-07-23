@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated, useColorScheme, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../context/AuthContext';
-import { getAllUsers, getAllBilleteras, getAllTiposMovimiento } from '../database/database';
+import { getAllBilleteras, getAllTiposMovimiento, updateUserPassword } from '../database/database';
 import { Colors } from '../constants/theme';
 
 // Componentes modulares
@@ -10,20 +10,19 @@ import AdminHeader from '../components/AdminHeader';
 import AdminTabBar from '../components/AdminTabBar';
 import AdminOptionsMenu from '../components/AdminOptionsMenu';
 
-// Vistas individuales del Administrador
-import UsuariosView from './admin/UsuariosView';
+// Vistas
+import DashboardView from './admin/DashboardView';
 import BilleterasView from './admin/BilleterasView';
 import MovimientosView from './admin/MovimientosView';
 
-export default function AdminScreen() {
+export default function MainScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
   const { user, logout } = useAuth();
 
-  // Pestaña activa
-  const [activeTab, setActiveTab] = useState('usuarios');
-  const [usersList, setUsersList] = useState([]);
+  // Pestaña activa (ahora inicia en dashboard)
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [billeterasList, setBilleterasList] = useState([]);
   const [tiposMovimientoList, setTiposMovimientoList] = useState([]);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
@@ -34,23 +33,15 @@ export default function AdminScreen() {
   const modalSlide = useRef(new Animated.Value(300)).current;
 
   useEffect(() => {
-    fetchUsers();
-    fetchBilleteras();
-    fetchTiposMovimiento();
-  }, []);
-
-  const fetchUsers = async () => {
-    try {
-      const data = await getAllUsers();
-      setUsersList(data);
-    } catch (e) {
-      console.error('Error al cargar usuarios:', e);
+    if (user?.id) {
+      fetchBilleteras();
+      fetchTiposMovimiento();
     }
-  };
+  }, [user?.id]);
 
   const fetchBilleteras = async () => {
     try {
-      const data = await getAllBilleteras();
+      const data = await getAllBilleteras(user.id);
       setBilleterasList(data);
     } catch (e) {
       console.error('Error al cargar billeteras:', e);
@@ -59,7 +50,7 @@ export default function AdminScreen() {
 
   const fetchTiposMovimiento = async () => {
     try {
-      const data = await getAllTiposMovimiento();
+      const data = await getAllTiposMovimiento(user.id);
       setTiposMovimientoList(data);
     } catch (e) {
       console.error('Error al cargar tipos de movimiento:', e);
@@ -131,10 +122,20 @@ export default function AdminScreen() {
     }, 200);
   };
 
+  const handleChangePassword = async (newPassword) => {
+    try {
+      const result = await updateUserPassword(user.id, newPassword);
+      return result;
+    } catch (e) {
+      console.error('Error al cambiar contraseña:', e);
+      return { success: false, message: 'Error inesperado.' };
+    }
+  };
+
   const handleBackPress = () => {
     Alert.alert(
       'Cerrar Sesión',
-      '¿Deseas salir del panel de administración?',
+      '¿Deseas cerrar sesión?',
       [
         { text: 'Cancelar', style: 'cancel' },
         { text: 'Cerrar Sesión', style: 'destructive', onPress: logout },
@@ -144,14 +145,14 @@ export default function AdminScreen() {
 
   const getTabTitle = () => {
     switch (activeTab) {
-      case 'usuarios':
-        return 'Usuarios';
+      case 'dashboard':
+        return 'Dashboard';
       case 'billeteras':
         return 'Billeteras';
       case 'movimientos':
         return 'Movimientos';
       default:
-        return 'Usuarios';
+        return 'Dashboard';
     }
   };
 
@@ -159,7 +160,7 @@ export default function AdminScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar style={theme.statusBar} />
 
-      {/* HEADER Y BANNER DE TÍTULO DE SECCIÓN */}
+      {/* HEADER */}
       <AdminHeader
         title={getTabTitle()}
         onBackPress={handleBackPress}
@@ -176,29 +177,30 @@ export default function AdminScreen() {
           },
         ]}
       >
-        {activeTab === 'usuarios' && (
-          <UsuariosView usersList={usersList} isDark={isDark} onRefresh={fetchUsers} />
+        {activeTab === 'dashboard' && (
+          <DashboardView isDark={isDark} user={user} />
         )}
         {activeTab === 'billeteras' && (
-          <BilleterasView isDark={isDark} billeterasList={billeterasList} onRefresh={fetchBilleteras} />
+          <BilleterasView isDark={isDark} billeterasList={billeterasList} onRefresh={fetchBilleteras} userId={user?.id} />
         )}
         {activeTab === 'movimientos' && (
-          <MovimientosView isDark={isDark} tiposMovimientoList={tiposMovimientoList} onRefresh={fetchTiposMovimiento} />
+          <MovimientosView isDark={isDark} tiposMovimientoList={tiposMovimientoList} onRefresh={fetchTiposMovimiento} userId={user?.id} />
         )}
       </Animated.View>
 
-      {/* BARRA DE NAVEGACIÓN INFERIOR TABS (COMPONENTE APARTADO) */}
+      {/* BARRA DE NAVEGACIÓN INFERIOR */}
       <AdminTabBar
         activeTab={activeTab}
         onSelectTab={changeTab}
         isDark={isDark}
       />
 
-      {/* MENÚ MODAL DE OPCIONES DE ADMINISTRADOR */}
+      {/* MENÚ MODAL DE OPCIONES */}
       <AdminOptionsMenu
         visible={showOptionsModal}
         onClose={closeOptionsModal}
         onLogout={handleLogout}
+        onChangePassword={handleChangePassword}
         user={user}
         isDark={isDark}
         modalSlide={modalSlide}

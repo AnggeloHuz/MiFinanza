@@ -15,7 +15,7 @@ const MONEDAS = [
  * Formulario reutilizable para Agregar o Editar una billetera.
  * Si se pasa `billetera`, entra en modo edición. Si no, modo creación.
  */
-export default function BilleteraFormView({ isDark, billetera, onBack, onSaved }) {
+export default function BilleteraFormView({ isDark, billetera, onBack, onSaved, userId }) {
   const theme = isDark ? Colors.dark : Colors.light;
   const isEditing = !!billetera;
 
@@ -53,6 +53,7 @@ export default function BilleteraFormView({ isDark, billetera, onBack, onSaved }
         );
       } else {
         result = await createBilletera(
+          userId,
           nombre.trim(),
           monedaSeleccionada.nombre,
           monedaSeleccionada.abreviatura,
