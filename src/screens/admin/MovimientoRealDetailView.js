@@ -1,38 +1,28 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
-import { deleteBilletera } from '../../database/database';
+import { deleteMovimiento } from '../../database/database';
 import { formatDateShortVE } from '../../utils/dateFormatter';
 import { formatCurrencyVE } from '../../utils/currencyFormatter';
-import BilleteraFormView from './BilleteraFormView';
+import { Ionicons } from '@expo/vector-icons';
 
-/**
- * Vista detallada de una billetera con opciones de editar y eliminar.
- */
-export default function BilleteraDetailView({ billetera, isDark, onBack, onRefresh, userId, onGoToHistory }) {
+export default function MovimientoRealDetailView({ movimiento, isDark, onBack, onRefresh, userId }) {
   const theme = isDark ? Colors.dark : Colors.light;
-  const [showEditForm, setShowEditForm] = useState(false);
 
-  // Colores por moneda para el avatar
-  const monedaColors = {
-    VES: '#3B82F6',
-    USD: '#10B981',
-    EUR: '#8B5CF6',
-  };
-
-  const avatarColor = monedaColors[billetera.moneda_abreviatura] || theme.accent;
+  const isIngreso = movimiento.categoria === 'Ingreso';
+  const tipoColor = isIngreso ? '#10B981' : '#EF4444';
 
   const handleDelete = () => {
     Alert.alert(
-      'Eliminar Billetera',
-      `¿Estás seguro de eliminar "${billetera.nombre}"? Se borrarán todos los datos asociados a esta billetera.`,
+      'Eliminar Movimiento',
+      `¿Estás seguro de eliminar este movimiento por ${formatCurrencyVE(movimiento.monto)} ${movimiento.moneda}? Se restaurará el balance de la billetera.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Eliminar',
           style: 'destructive',
           onPress: async () => {
-            const result = await deleteBilletera(billetera.id);
+            const result = await deleteMovimiento(movimiento.id, userId);
             if (result.success) {
               Alert.alert('Éxito', result.message);
               onBack();
@@ -46,117 +36,85 @@ export default function BilleteraDetailView({ billetera, isDark, onBack, onRefre
     );
   };
 
-  // Si se está editando, mostrar el formulario reutilizable
-  if (showEditForm) {
-    return (
-      <BilleteraFormView
-        isDark={isDark}
-        billetera={billetera}
-        userId={userId}
-        onBack={() => setShowEditForm(false)}
-        onSaved={() => {
-          setShowEditForm(false);
-          if (onRefresh) onRefresh();
-          onBack();
-        }}
-      />
-    );
-  }
+  // Convertir fecha YYYY-MM-DD a objeto Date o formatearla
+  const dateParts = movimiento.fecha.split('-');
+  const formattedDate = dateParts.length === 3 
+    ? `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}` 
+    : movimiento.fecha;
 
   return (
     <View style={styles.detailContainer}>
-      {/* Header */}
       <View style={[styles.detailHeader, { borderBottomColor: theme.inputBorder }]}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
           <Text style={[styles.backBtnText, { color: theme.accent, fontFamily: Fonts.medium }]}>
-            ← Volver a la lista
+            ← Volver al historial
           </Text>
         </TouchableOpacity>
         <Text style={[styles.detailTitle, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
-          Detalles de Billetera
+          Detalles del Movimiento
         </Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.detailScroll}>
-        {/* Perfil / Avatar */}
         <View style={styles.profileHeader}>
-          <View style={[styles.largeAvatar, { backgroundColor: avatarColor }]}>
-            <Text style={styles.largeAvatarText}>
-              {billetera.moneda_abreviatura}
-            </Text>
+          <View style={[styles.largeAvatar, { backgroundColor: tipoColor }]}>
+            <Ionicons
+              name={isIngreso ? 'arrow-down-circle' : 'arrow-up-circle'}
+              size={38}
+              color="#FFF"
+            />
           </View>
           <Text style={[styles.profileName, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
-            {billetera.nombre}
+            {formatCurrencyVE(movimiento.monto)} {movimiento.moneda}
           </Text>
-          <Text style={[styles.profileRole, { color: theme.textSecondary, fontFamily: Fonts.regular }]}>
-            {billetera.moneda}
-          </Text>
+          <View style={[styles.tipoBadgeDetail, { backgroundColor: tipoColor + '20', borderColor: tipoColor }]}>
+            <Text style={[styles.tipoBadgeDetailText, { color: tipoColor, fontFamily: Fonts.medium }]}>
+              {movimiento.tipo_nombre}
+            </Text>
+          </View>
         </View>
 
-        {/* Información detallada */}
         <View style={[styles.infoCard, { backgroundColor: theme.cardBackground, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
           <Text style={[styles.sectionTitle, { color: theme.textPrimary, fontFamily: Fonts.medium }]}>
             Información General
           </Text>
 
           <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>ID:</Text>
-            <Text style={[styles.infoValue, { color: theme.textPrimary }]}>#{billetera.id}</Text>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Fecha:</Text>
+            <Text style={[styles.infoValue, { color: theme.textPrimary }]}>{formattedDate}</Text>
           </View>
 
           <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Nombre:</Text>
-            <Text style={[styles.infoValue, { color: theme.textPrimary }]}>{billetera.nombre}</Text>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Billetera:</Text>
+            <Text style={[styles.infoValue, { color: theme.textPrimary }]}>{movimiento.billetera_nombre}</Text>
           </View>
 
           <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Moneda:</Text>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Categoría (Tipo):</Text>
+            <Text style={[styles.infoValue, { color: tipoColor, fontWeight: 'bold' }]}>{movimiento.categoria}</Text>
+          </View>
+
+          {movimiento.descripcion ? (
+            <View style={styles.infoRowColumn}>
+              <Text style={[styles.infoLabel, { color: theme.textSecondary, marginBottom: 4 }]}>Descripción:</Text>
+              <Text style={[styles.infoValue, { color: theme.textPrimary }]}>{movimiento.descripcion}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Registrado el:</Text>
             <Text style={[styles.infoValue, { color: theme.textPrimary }]}>
-              {billetera.moneda} ({billetera.moneda_abreviatura})
-            </Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Balance:</Text>
-            <Text style={[styles.infoValue, { color: theme.textPrimary }]}>
-              {formatCurrencyVE(billetera.balance)} {billetera.moneda_abreviatura}
-            </Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Código:</Text>
-            <Text style={[styles.infoValue, { color: theme.textPrimary }]}>{billetera.codigo}</Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Fecha de Creación:</Text>
-            <Text style={[styles.infoValue, { color: theme.textPrimary }]}>
-              {billetera.created_at ? formatDateShortVE(billetera.created_at) : 'No disponible'}
+              {movimiento.created_at ? formatDateShortVE(movimiento.created_at) : 'No disponible'}
             </Text>
           </View>
         </View>
 
-        {/* Acciones */}
         <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#3B82F6' }]}
-            onPress={onGoToHistory}
-          >
-            <Text style={styles.actionBtnText}>Ver Historial de Movimientos</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: theme.accent }]}
-            onPress={() => setShowEditForm(true)}
-          >
-            <Text style={styles.actionBtnText}>Editar Billetera</Text>
-          </TouchableOpacity>
-
           <TouchableOpacity
             style={[styles.actionBtn, styles.deleteBtn]}
             onPress={handleDelete}
           >
-            <Text style={styles.deleteBtnText}>Eliminar Billetera y Datos</Text>
+            <Text style={styles.deleteBtnText}>Eliminar Movimiento</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -208,17 +166,17 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
-  largeAvatarText: {
-    fontSize: 22,
-    color: '#FFF',
-    fontWeight: 'bold',
-    letterSpacing: 1,
-  },
   profileName: {
-    fontSize: 24,
-    marginBottom: 4,
+    fontSize: 28,
+    marginBottom: Spacing.sm,
   },
-  profileRole: {
+  tipoBadgeDetail: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+  },
+  tipoBadgeDetailText: {
     fontSize: 14,
   },
   infoCard: {
@@ -238,6 +196,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(150,150,150,0.1)',
   },
+  infoRowColumn: {
+    flexDirection: 'column',
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(150,150,150,0.1)',
+  },
   infoLabel: {
     fontSize: 14,
   },
@@ -253,11 +217,6 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  actionBtnText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   deleteBtn: {
     backgroundColor: 'transparent',

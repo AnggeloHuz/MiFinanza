@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 import BilleteraFormView from './BilleteraFormView';
 import BilleteraDetailView from './BilleteraDetailView';
+import { formatCurrencyVE } from '../../utils/currencyFormatter';
 
 // Colores por moneda para el avatar de la tarjeta
 const MONEDA_COLORS = {
@@ -12,7 +13,7 @@ const MONEDA_COLORS = {
   EUR: '#8B5CF6',
 };
 
-export default function BilleterasView({ isDark, billeterasList, onRefresh, userId }) {
+export default function BilleterasView({ isDark, billeterasList, onRefresh, userId, onGoToHistory }) {
   const theme = isDark ? Colors.dark : Colors.light;
 
   const [selectedBilletera, setSelectedBilletera] = useState(null);
@@ -41,6 +42,7 @@ export default function BilleterasView({ isDark, billeterasList, onRefresh, user
         userId={userId}
         onBack={() => setSelectedBilletera(null)}
         onRefresh={onRefresh}
+        onGoToHistory={() => onGoToHistory && onGoToHistory(selectedBilletera.nombre)}
       />
     );
   }
@@ -83,12 +85,17 @@ export default function BilleterasView({ isDark, billeterasList, onRefresh, user
       >
         {/* Header de sección */}
         <View style={styles.cardHeaderRow}>
-          <Text style={[styles.cardHeaderTitle, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
-            Billeteras Registradas
-          </Text>
-          <View style={[styles.countBadge, { backgroundColor: theme.accent }]}>
-            <Text style={styles.countBadgeText}>{filteredBilleteras.length}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={[styles.cardHeaderTitle, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
+              Billeteras Registradas
+            </Text>
+            <View style={[styles.countBadge, { backgroundColor: theme.accent, marginLeft: Spacing.sm }]}>
+              <Text style={styles.countBadgeText}>{filteredBilleteras.length}</Text>
+            </View>
           </View>
+          <TouchableOpacity onPress={onRefresh} style={{ padding: Spacing.xs }}>
+            <Ionicons name="refresh" size={20} color={theme.accent} />
+          </TouchableOpacity>
         </View>
 
         {/* Botón Agregar */}
@@ -144,6 +151,9 @@ export default function BilleterasView({ isDark, billeterasList, onRefresh, user
                   </Text>
                   <Text style={[styles.billeteraSubText, { color: theme.textSecondary, fontFamily: Fonts.regular }]}>
                     {item.codigo !== 'Sin código' ? `Código: ${item.codigo}` : 'Sin código bancario'}
+                  </Text>
+                  <Text style={[styles.billeteraSubText, { color: theme.textPrimary, fontFamily: Fonts.medium, marginTop: 4 }]}>
+                    Balance: {formatCurrencyVE(item.balance)}
                   </Text>
                 </View>
 

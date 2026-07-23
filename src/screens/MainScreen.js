@@ -27,6 +27,10 @@ export default function MainScreen() {
   const [tiposMovimientoList, setTiposMovimientoList] = useState([]);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
 
+  // Params para navegación cruzada
+  const [movimientosInitialView, setMovimientosInitialView] = useState('menu');
+  const [movimientosFilter, setMovimientosFilter] = useState('');
+
   // Animaciones de transición
   const contentFade = useRef(new Animated.Value(1)).current;
   const contentSlide = useRef(new Animated.Value(0)).current;
@@ -57,10 +61,15 @@ export default function MainScreen() {
     }
   };
 
-  const changeTab = (tabId) => {
+  const changeTab = (tabId, params = {}) => {
     if (tabId === 'opciones') {
       openOptionsModal();
       return;
+    }
+
+    if (tabId === 'movimientos') {
+      setMovimientosInitialView(params.initialView || 'menu');
+      setMovimientosFilter(params.filter || '');
     }
 
     if (tabId === activeTab) return;
@@ -181,10 +190,23 @@ export default function MainScreen() {
           <DashboardView isDark={isDark} user={user} />
         )}
         {activeTab === 'billeteras' && (
-          <BilleterasView isDark={isDark} billeterasList={billeterasList} onRefresh={fetchBilleteras} userId={user?.id} />
+          <BilleterasView 
+            isDark={isDark} 
+            billeterasList={billeterasList} 
+            onRefresh={fetchBilleteras} 
+            userId={user?.id} 
+            onGoToHistory={(walletName) => changeTab('movimientos', { initialView: 'historial', filter: walletName })}
+          />
         )}
         {activeTab === 'movimientos' && (
-          <MovimientosView isDark={isDark} tiposMovimientoList={tiposMovimientoList} onRefresh={fetchTiposMovimiento} userId={user?.id} />
+          <MovimientosView 
+            isDark={isDark} 
+            tiposMovimientoList={tiposMovimientoList} 
+            onRefresh={fetchTiposMovimiento} 
+            userId={user?.id} 
+            initialView={movimientosInitialView}
+            initialFilter={movimientosFilter}
+          />
         )}
       </Animated.View>
 

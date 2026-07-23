@@ -43,6 +43,7 @@ export async function initDatabase() {
       moneda TEXT NOT NULL,
       moneda_abreviatura TEXT NOT NULL,
       codigo TEXT NOT NULL DEFAULT 'Sin código',
+      balance REAL DEFAULT 0.00,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
@@ -57,6 +58,23 @@ export async function initDatabase() {
       nombre TEXT NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  `);
+
+  // Crear tabla de movimientos
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS movimientos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      billetera_id INTEGER NOT NULL,
+      tipo_movimiento_id INTEGER NOT NULL,
+      monto REAL NOT NULL,
+      descripcion TEXT,
+      fecha TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (billetera_id) REFERENCES billeteras(id),
+      FOREIGN KEY (tipo_movimiento_id) REFERENCES tipos_movimiento(id)
     );
   `);
 
@@ -104,6 +122,14 @@ async function migrateOrphanedData(database) {
     await database.execAsync('ALTER TABLE billeteras ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0');
   } catch (e) {
     // La columna ya existe, ignorar
+  }
+
+  // Agregar columna balance si no existe (migración)
+  try {
+    await database.execAsync('ALTER TABLE billeteras ADD COLUMN balance REAL DEFAULT 0.00;');
+    console.log('[DB] Columna balance agregada exitosamente.');
+  } catch (e) {
+    console.log('[DB] Columna balance ya existe o error:', e);
   }
 
   try {
@@ -203,12 +229,12 @@ export async function createUser(usuario, contrasena) {
  */
 export async function updateUserPassword(userId, newPassword) {
   const database = await getDB();
-  
+
   await database.runAsync(
     'UPDATE users SET contrasena = ? WHERE id = ?',
     [newPassword, userId]
   );
-  
+
   return { success: true, message: 'Contraseña actualizada exitosamente.' };
 }
 
@@ -223,14 +249,15 @@ export async function updateUserPassword(userId, newPassword) {
  * @param {string} moneda - Nombre completo de la moneda
  * @param {string} monedaAbreviatura - Abreviatura (VES, USD, EUR)
  * @param {string} codigo - Código bancario o 'Sin código'
+ * @param {number} balance - Saldo inicial de la billetera
  * @returns {Object} Resultado con success y message
  */
-export async function createBilletera(userId, nombre, moneda, monedaAbreviatura, codigo) {
+export async function createBilletera(userId, nombre, moneda, monedaAbreviatura, codigo, balance = 0.00) {
   const database = await getDB();
 
   const result = await database.runAsync(
-    'INSERT INTO billeteras (user_id, nombre, moneda, moneda_abreviatura, codigo) VALUES (?, ?, ?, ?, ?)',
-    [userId, nombre, moneda, monedaAbreviatura, codigo || 'Sin código']
+    'INSERT INTO billeteras (user_id, nombre, moneda, moneda_abreviatura, codigo, balance) VALUES (?, ?, ?, ?, ?, ?)',
+    [userId, nombre, moneda, monedaAbreviatura, codigo || 'Sin código', balance]
   );
 
   console.log('[DB] Nueva billetera creada:', nombre);
@@ -249,7 +276,7 @@ export async function createBilletera(userId, nombre, moneda, monedaAbreviatura,
 export async function getAllBilleteras(userId) {
   const database = await getDB();
   const billeteras = await database.getAllAsync(
-    'SELECT id, user_id, nombre, moneda, moneda_abreviatura, codigo, created_at FROM billeteras WHERE user_id = ? ORDER BY id DESC',
+    'SELECT id, user_id, nombre, moneda, moneda_abreviatura, codigo, balance, created_at FROM billeteras WHERE user_id = ? ORDER BY id DESC',
     [userId]
   );
   return billeteras || [];
@@ -262,14 +289,15 @@ export async function getAllBilleteras(userId) {
  * @param {string} moneda - Nueva moneda
  * @param {string} monedaAbreviatura - Nueva abreviatura
  * @param {string} codigo - Nuevo código
+ * @param {number} balance - Nuevo balance
  * @returns {Object} Resultado de la operación
  */
-export async function updateBilletera(billeteraId, nombre, moneda, monedaAbreviatura, codigo) {
+export async function updateBilletera(billeteraId, nombre, moneda, monedaAbreviatura, codigo, balance) {
   const database = await getDB();
 
   await database.runAsync(
-    'UPDATE billeteras SET nombre = ?, moneda = ?, moneda_abreviatura = ?, codigo = ? WHERE id = ?',
-    [nombre, moneda, monedaAbreviatura, codigo || 'Sin código', billeteraId]
+    'UPDATE billeteras SET nombre = ?, moneda = ?, moneda_abreviatura = ?, codigo = ?, balance = ? WHERE id = ?',
+    [nombre, moneda, monedaAbreviatura, codigo || 'Sin código', balance, billeteraId]
   );
 
   return { success: true, message: 'Billetera actualizada exitosamente.' };
@@ -283,9 +311,7 @@ export async function updateBilletera(billeteraId, nombre, moneda, monedaAbrevia
 export async function deleteBilletera(billeteraId) {
   const database = await getDB();
 
-  // A futuro aquí se borrarán movimientos y datos asociados
-  // await database.runAsync('DELETE FROM movimientos WHERE billetera_id = ?', [billeteraId]);
-
+  await database.runAsync('DELETE FROM movimientos WHERE billetera_id = ?', [billeteraId]);
   await database.runAsync('DELETE FROM billeteras WHERE id = ?', [billeteraId]);
   return { success: true, message: 'Billetera eliminada exitosamente.' };
 }
@@ -359,4 +385,110 @@ export async function deleteTipoMovimiento(tipoId) {
 
   await database.runAsync('DELETE FROM tipos_movimiento WHERE id = ?', [tipoId]);
   return { success: true, message: 'Tipo de movimiento eliminado exitosamente.' };
+}
+
+// ============================================================
+// MOVIMIENTOS REALES - CRUD (filtrados por user_id)
+// ============================================================
+
+/**
+ * Crea un movimiento y afecta el balance de la billetera.
+ */
+export async function createMovimiento(userId, billeteraId, tipoMovimientoId, monto, descripcion, fecha) {
+  const database = await getDB();
+
+  const billetera = await database.getFirstAsync('SELECT id, balance FROM billeteras WHERE id = ? AND user_id = ?', [billeteraId, userId]);
+  if (!billetera) return { success: false, message: 'La billetera seleccionada no existe o no es válida.' };
+
+  const tipoObj = await database.getFirstAsync('SELECT id, tipo FROM tipos_movimiento WHERE id = ? AND user_id = ?', [tipoMovimientoId, userId]);
+  if (!tipoObj) return { success: false, message: 'El tipo de movimiento seleccionado no existe.' };
+
+  const montoNum = parseFloat(monto);
+  if (isNaN(montoNum) || montoNum <= 0) return { success: false, message: 'El monto debe ser mayor a cero.' };
+
+  let nuevoBalance = billetera.balance;
+
+  if (tipoObj.tipo === 'Ingreso') {
+    nuevoBalance += montoNum;
+  } else if (tipoObj.tipo === 'Egreso') {
+    nuevoBalance -= montoNum;
+    if (nuevoBalance < 0) {
+      return { success: false, message: 'No tienes fondos suficientes en esta billetera. El balance no puede quedar en negativo.' };
+    }
+  }
+
+  try {
+    await database.runAsync('UPDATE billeteras SET balance = ? WHERE id = ?', [nuevoBalance, billeteraId]);
+    await database.runAsync(
+      'INSERT INTO movimientos (user_id, billetera_id, tipo_movimiento_id, monto, descripcion, fecha) VALUES (?, ?, ?, ?, ?, ?)',
+      [userId, billeteraId, tipoMovimientoId, montoNum, descripcion || '', fecha]
+    );
+
+    return { success: true, message: 'Movimiento registrado exitosamente.' };
+  } catch (e) {
+    console.error('[DB] Error al registrar movimiento:', e);
+    return { success: false, message: 'Ocurrió un error al guardar el movimiento.' };
+  }
+}
+
+/**
+ * Elimina un movimiento y restaura el balance de la billetera.
+ */
+export async function deleteMovimiento(movimientoId, userId) {
+  const database = await getDB();
+
+  const mov = await database.getFirstAsync(
+    'SELECT m.id, m.monto, m.billetera_id, m.tipo_movimiento_id, t.tipo FROM movimientos m JOIN tipos_movimiento t ON m.tipo_movimiento_id = t.id WHERE m.id = ? AND m.user_id = ?',
+    [movimientoId, userId]
+  );
+
+  if (!mov) return { success: false, message: 'Movimiento no encontrado.' };
+
+  const billetera = await database.getFirstAsync('SELECT id, balance FROM billeteras WHERE id = ?', [mov.billetera_id]);
+
+  if (!billetera) {
+    // Si por alguna razón la billetera no existe, solo borramos el movimiento sin restaurar.
+    await database.runAsync('DELETE FROM movimientos WHERE id = ?', [movimientoId]);
+    return { success: true, message: 'Movimiento eliminado correctamente.' };
+  }
+
+  let nuevoBalance = billetera.balance;
+
+  if (mov.tipo === 'Ingreso') {
+    nuevoBalance -= mov.monto;
+    if (nuevoBalance < 0) {
+      return { success: false, message: 'No se puede eliminar este ingreso porque el balance de la billetera asociada quedaría por debajo de cero.' };
+    }
+  } else if (mov.tipo === 'Egreso') {
+    nuevoBalance += mov.monto;
+  }
+
+  try {
+    await database.runAsync('UPDATE billeteras SET balance = ? WHERE id = ?', [nuevoBalance, billetera.id]);
+    await database.runAsync('DELETE FROM movimientos WHERE id = ?', [movimientoId]);
+    return { success: true, message: 'Movimiento eliminado y balance de billetera restaurado.' };
+  } catch (e) {
+    console.error('[DB] Error al eliminar movimiento:', e);
+    return { success: false, message: 'Error interno al intentar eliminar.' };
+  }
+}
+
+/**
+ * Obtiene todos los movimientos formateados.
+ */
+export async function getAllMovimientos(userId) {
+  const database = await getDB();
+  const query = `
+    SELECT 
+      m.id, m.monto, m.descripcion, m.fecha, m.created_at,
+      b.nombre as billetera_nombre, b.moneda_abreviatura as moneda,
+      t.nombre as tipo_nombre, t.tipo as categoria
+    FROM movimientos m
+    JOIN billeteras b ON m.billetera_id = b.id
+    JOIN tipos_movimiento t ON m.tipo_movimiento_id = t.id
+    WHERE m.user_id = ?
+    ORDER BY m.fecha DESC, m.id DESC
+  `;
+  const movs = await database.getAllAsync(query, [userId]);
+  return movs || [];
 }

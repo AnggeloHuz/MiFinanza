@@ -22,11 +22,13 @@ export default function BilleteraFormView({ isDark, billetera, onBack, onSaved, 
   const [nombre, setNombre] = useState('');
   const [monedaIndex, setMonedaIndex] = useState(0);
   const [codigo, setCodigo] = useState('');
+  const [balance, setBalance] = useState('0.00');
 
   useEffect(() => {
     if (billetera) {
       setNombre(billetera.nombre);
       setCodigo(billetera.codigo === 'Sin código' ? '' : billetera.codigo);
+      setBalance(billetera.balance ? billetera.balance.toString() : '0.00');
       const idx = MONEDAS.findIndex((m) => m.abreviatura === billetera.moneda_abreviatura);
       setMonedaIndex(idx >= 0 ? idx : 0);
     }
@@ -40,6 +42,7 @@ export default function BilleteraFormView({ isDark, billetera, onBack, onSaved, 
 
     const monedaSeleccionada = MONEDAS[monedaIndex];
     const codigoFinal = codigo.trim() || 'Sin código';
+    const balanceNum = parseFloat(balance.replace(',', '.')) || 0.00;
 
     try {
       let result;
@@ -49,7 +52,8 @@ export default function BilleteraFormView({ isDark, billetera, onBack, onSaved, 
           nombre.trim(),
           monedaSeleccionada.nombre,
           monedaSeleccionada.abreviatura,
-          codigoFinal
+          codigoFinal,
+          balanceNum
         );
       } else {
         result = await createBilletera(
@@ -57,7 +61,8 @@ export default function BilleteraFormView({ isDark, billetera, onBack, onSaved, 
           nombre.trim(),
           monedaSeleccionada.nombre,
           monedaSeleccionada.abreviatura,
-          codigoFinal
+          codigoFinal,
+          balanceNum
         );
       }
 
@@ -181,6 +186,28 @@ export default function BilleteraFormView({ isDark, billetera, onBack, onSaved, 
           <Text style={[styles.helperText, { color: theme.textSecondary }]}>
             Si la billetera no es un banco, se guardará como "Sin código".
           </Text>
+        </View>
+
+        {/* Balance */}
+        <View style={styles.fieldContainer}>
+          <Text style={[styles.label, { color: theme.textPrimary, fontFamily: Fonts.medium }]}>
+            Balance Actual / Inicial
+          </Text>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                color: theme.textPrimary,
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFF',
+                borderColor: theme.inputBorder,
+              },
+            ]}
+            placeholder="0.00"
+            placeholderTextColor={theme.placeholder}
+            keyboardType="numeric"
+            value={balance}
+            onChangeText={setBalance}
+          />
         </View>
 
         {/* Botón Guardar */}

@@ -3,12 +3,18 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 import TiposMovimientoView from './TiposMovimientoView';
+import HistorialMovimientosView from './HistorialMovimientosView';
 
-export default function MovimientosView({ isDark, tiposMovimientoList, onRefresh, userId }) {
+export default function MovimientosView({ isDark, tiposMovimientoList, onRefresh, userId, initialView, initialFilter }) {
   const theme = isDark ? Colors.dark : Colors.light;
   
   // 'menu' | 'tipos' | 'historial'
-  const [currentView, setCurrentView] = useState('menu');
+  const [currentView, setCurrentView] = useState(initialView || 'menu');
+
+  // React to initialView changes if the tab is re-selected with new params
+  React.useEffect(() => {
+    if (initialView) setCurrentView(initialView);
+  }, [initialView]);
 
   if (currentView === 'tipos') {
     return (
@@ -24,22 +30,12 @@ export default function MovimientosView({ isDark, tiposMovimientoList, onRefresh
 
   if (currentView === 'historial') {
     return (
-      <View style={styles.container}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => setCurrentView('menu')} style={{ marginRight: 10, padding: 5 }}>
-            <Ionicons name="arrow-back" size={20} color={theme.textPrimary} />
-          </TouchableOpacity>
-          <Text style={[styles.title, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
-            Historial de Movimientos
-          </Text>
-        </View>
-        <View style={styles.placeholderContainer}>
-          <Ionicons name="construct-outline" size={48} color={theme.textSecondary} />
-          <Text style={[styles.placeholderText, { color: theme.textSecondary, fontFamily: Fonts.medium }]}>
-            El historial de movimientos estará disponible próximamente.
-          </Text>
-        </View>
-      </View>
+      <HistorialMovimientosView 
+        isDark={isDark} 
+        userId={userId} 
+        onBackMenu={() => setCurrentView('menu')}
+        initialFilter={initialFilter}
+      />
     );
   }
 
