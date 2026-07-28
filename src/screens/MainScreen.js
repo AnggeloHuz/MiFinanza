@@ -14,6 +14,7 @@ import AdminOptionsMenu from '../components/AdminOptionsMenu';
 import DashboardView from './admin/DashboardView';
 import BilleterasView from './admin/BilleterasView';
 import MovimientosView from './admin/MovimientosView';
+import CreditoCobranzaView from './admin/CreditoCobranzaView';
 
 export default function MainScreen() {
   const colorScheme = useColorScheme();
@@ -160,6 +161,8 @@ export default function MainScreen() {
         return 'Billeteras';
       case 'movimientos':
         return 'Movimientos';
+      case 'creditos':
+        return 'Crédito y Cobranza';
       default:
         return 'Dashboard';
     }
@@ -208,6 +211,9 @@ export default function MainScreen() {
             initialFilter={movimientosFilter}
           />
         )}
+        {activeTab === 'creditos' && (
+          <CreditoCobranzaView isDark={isDark} userId={user?.id} />
+        )}
       </Animated.View>
 
       {/* BARRA DE NAVEGACIÓN INFERIOR */}
@@ -223,6 +229,12 @@ export default function MainScreen() {
         onClose={closeOptionsModal}
         onLogout={handleLogout}
         onChangePassword={handleChangePassword}
+        onNavigateOption={(option) => {
+          closeOptionsModal();
+          setTimeout(() => {
+            setActiveTab(option);
+          }, 200);
+        }}
         user={user}
         isDark={isDark}
         modalSlide={modalSlide}

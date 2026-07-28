@@ -78,6 +78,44 @@ export async function initDatabase() {
     );
   `);
 
+  // Crear tabla de creditos
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS creditos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      entidad TEXT NOT NULL,
+      nombre TEXT NOT NULL,
+      fecha_pago TEXT NOT NULL,
+      monto REAL NOT NULL,
+      moneda TEXT NOT NULL DEFAULT 'VES',
+      descripcion TEXT,
+      estatus TEXT NOT NULL DEFAULT 'sin pagar',
+      movimiento_id INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (movimiento_id) REFERENCES movimientos(id)
+    );
+  `);
+
+  // Crear tabla de cobranzas
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS cobranzas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      entidad TEXT NOT NULL,
+      nombre TEXT NOT NULL,
+      fecha_cobro TEXT NOT NULL,
+      monto REAL NOT NULL,
+      moneda TEXT NOT NULL DEFAULT 'VES',
+      descripcion TEXT,
+      estatus TEXT NOT NULL DEFAULT 'sin cobrar',
+      movimiento_id INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (movimiento_id) REFERENCES movimientos(id)
+    );
+  `);
+
   // Insertar usuario semilla si no existe
   const existingUser = await database.getFirstAsync(
     'SELECT id FROM users WHERE usuario = ?',
@@ -137,6 +175,22 @@ async function migrateOrphanedData(database) {
   } catch (e) {
     // La columna ya existe, ignorar
   }
+
+  // Agregar columna moneda a creditos si no existe
+  try {
+    await database.execAsync("ALTER TABLE creditos ADD COLUMN moneda TEXT NOT NULL DEFAULT 'VES';");
+    console.log('[DB] Columna moneda agregada a creditos exitosamente.');
+  } catch (e) {
+    // La columna ya existe
+  }
+
+  // Agregar columna descripcion a creditos y cobranzas
+  try {
+    await database.execAsync("ALTER TABLE creditos ADD COLUMN descripcion TEXT;");
+  } catch (e) {}
+  try {
+    await database.execAsync("ALTER TABLE cobranzas ADD COLUMN descripcion TEXT;");
+  } catch (e) {}
 
   // Asignar registros huérfanos (user_id = 0) al usuario admin
   await database.runAsync(
@@ -492,3 +546,252 @@ export async function getAllMovimientos(userId) {
   const movs = await database.getAllAsync(query, [userId]);
   return movs || [];
 }
+
+// ============================================================
+// CRÉDITOS (Cuentas por Pagar)
+// ============================================================
+
+/**
+ * Crea un nuevo crédito (cuenta por pagar).
+ */
+export async function createCredito(userId, entidad, nombre, fecha_pago, monto, moneda, descripcion) {
+  const database = await getDB();
+  const montoNum = parseFloat(monto);
+  if (isNaN(montoNum) || montoNum <= 0) return { success: false, message: 'El monto debe ser mayor a cero.' };
+
+  try {
+    const result = await database.runAsync(
+      'INSERT INTO creditos (user_id, entidad, nombre, fecha_pago, monto, moneda, descripcion) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [userId, entidad, nombre, fecha_pago, montoNum, moneda, descripcion || '']
+    );
+    return { success: true, message: 'Crédito creado exitosamente.' };
+  } catch (e) {
+    console.error('[DB] Error al crear crédito:', e);
+    return { success: false, message: 'Error al registrar el crédito.' };
+  }
+}
+
+/**
+ * Obtiene todos los créditos de un usuario.
+ */
+export async function getAllCreditos(userId) {
+  const database = await getDB();
+  const creditos = await database.getAllAsync(
+    'SELECT * FROM creditos WHERE user_id = ? ORDER BY CASE WHEN estatus = "sin pagar" THEN 0 ELSE 1 END, fecha_pago ASC',
+    [userId]
+  );
+  return creditos || [];
+}
+
+/**
+ * Paga un crédito: 
+ * 1. Descuenta balance de la billetera.
+ * 2. Crea movimiento "Crédito" (Egreso).
+ * 3. Actualiza el crédito a 'pagado' con movimiento_id.
+ */
+export async function payCredito(creditoId, billeteraId, userId) {
+  const database = await getDB();
+
+  // 1. Obtener crédito
+  const credito = await database.getFirstAsync('SELECT * FROM creditos WHERE id = ? AND user_id = ?', [creditoId, userId]);
+  if (!credito) return { success: false, message: 'Crédito no encontrado.' };
+  if (credito.estatus === 'pagado') return { success: false, message: 'Este crédito ya se encuentra pagado.' };
+
+  // 2. Obtener Billetera
+  const billetera = await database.getFirstAsync('SELECT id, balance FROM billeteras WHERE id = ? AND user_id = ?', [billeteraId, userId]);
+  if (!billetera) return { success: false, message: 'Billetera no encontrada.' };
+
+  if (billetera.balance < credito.monto) {
+    return { success: false, message: 'La billetera no tiene fondos suficientes para pagar este crédito.' };
+  }
+
+  // 3. Buscar o crear Tipo de Movimiento "Crédito"
+  let tipoObj = await database.getFirstAsync('SELECT id FROM tipos_movimiento WHERE user_id = ? AND nombre = ? COLLATE NOCASE', [userId, 'Crédito']);
+  let tipoId;
+  if (tipoObj) {
+    tipoId = tipoObj.id;
+  } else {
+    const resTipo = await database.runAsync(
+      'INSERT INTO tipos_movimiento (user_id, tipo, nombre) VALUES (?, ?, ?)',
+      [userId, 'Egreso', 'Crédito']
+    );
+    tipoId = resTipo.lastInsertRowId;
+  }
+
+  // 4. Procesar la transacción
+  const nuevoBalance = billetera.balance - credito.monto;
+  const descripcion = `Pago de crédito a: ${credito.nombre}`;
+  
+  // Usamos la fecha actual en formato dd/mm/aaaa
+  const hoy = new Date();
+  const d = String(hoy.getDate()).padStart(2, '0');
+  const m = String(hoy.getMonth() + 1).padStart(2, '0');
+  const a = hoy.getFullYear();
+  const fechaHoy = `${d}/${m}/${a}`;
+
+  try {
+    await database.runAsync('UPDATE billeteras SET balance = ? WHERE id = ?', [nuevoBalance, billeteraId]);
+    
+    const movResult = await database.runAsync(
+      'INSERT INTO movimientos (user_id, billetera_id, tipo_movimiento_id, monto, descripcion, fecha) VALUES (?, ?, ?, ?, ?, ?)',
+      [userId, billeteraId, tipoId, credito.monto, descripcion, fechaHoy]
+    );
+    
+    const movId = movResult.lastInsertRowId;
+
+    await database.runAsync(
+      'UPDATE creditos SET estatus = ?, movimiento_id = ? WHERE id = ?',
+      ['pagado', movId, creditoId]
+    );
+
+    return { success: true, message: 'Crédito pagado exitosamente.' };
+  } catch (e) {
+    console.error('[DB] Error al pagar crédito:', e);
+    return { success: false, message: 'Ocurrió un error al procesar el pago del crédito.' };
+  }
+}
+
+/**
+ * Elimina un crédito. Si estaba pagado, revierte la transacción.
+ */
+export async function deleteCredito(creditoId, userId) {
+  const database = await getDB();
+  const credito = await database.getFirstAsync('SELECT * FROM creditos WHERE id = ? AND user_id = ?', [creditoId, userId]);
+  
+  if (!credito) return { success: false, message: 'Crédito no encontrado.' };
+
+  try {
+    // Si está pagado, revertir el movimiento (lo que restaura la billetera)
+    if (credito.estatus === 'pagado' && credito.movimiento_id) {
+      await deleteMovimiento(credito.movimiento_id, userId);
+    }
+    
+    await database.runAsync('DELETE FROM creditos WHERE id = ?', [creditoId]);
+    return { success: true, message: 'Crédito eliminado exitosamente.' };
+  } catch (e) {
+    console.error('[DB] Error al eliminar crédito:', e);
+    return { success: false, message: 'Error interno al eliminar el crédito.' };
+  }
+}
+
+// ============================================================
+// COBRANZAS (Cuentas por Cobrar)
+// ============================================================
+
+/**
+ * Crea una nueva cobranza (cuenta por cobrar).
+ */
+export async function createCobranza(userId, entidad, nombre, fecha_cobro, monto, moneda, descripcion) {
+  const database = await getDB();
+  const montoNum = parseFloat(monto);
+  if (isNaN(montoNum) || montoNum <= 0) return { success: false, message: 'El monto debe ser mayor a cero.' };
+
+  try {
+    await database.runAsync(
+      'INSERT INTO cobranzas (user_id, entidad, nombre, fecha_cobro, monto, moneda, descripcion) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [userId, entidad, nombre, fecha_cobro, montoNum, moneda, descripcion || '']
+    );
+    return { success: true, message: 'Cobranza creada exitosamente.' };
+  } catch (e) {
+    console.error('[DB] Error al crear cobranza:', e);
+    return { success: false, message: 'Error al registrar la cobranza.' };
+  }
+}
+
+/**
+ * Obtiene todas las cobranzas de un usuario.
+ */
+export async function getAllCobranzas(userId) {
+  const database = await getDB();
+  const cobranzas = await database.getAllAsync(
+    'SELECT * FROM cobranzas WHERE user_id = ? ORDER BY CASE WHEN estatus = "sin cobrar" THEN 0 ELSE 1 END, fecha_cobro ASC',
+    [userId]
+  );
+  return cobranzas || [];
+}
+
+/**
+ * Cobra una cobranza: 
+ * 1. Aumenta balance de la billetera.
+ * 2. Crea movimiento "Cobranza" (Ingreso).
+ * 3. Actualiza la cobranza a 'cobrado' con movimiento_id.
+ */
+export async function collectCobranza(cobranzaId, billeteraId, userId) {
+  const database = await getDB();
+
+  const cobranza = await database.getFirstAsync('SELECT * FROM cobranzas WHERE id = ? AND user_id = ?', [cobranzaId, userId]);
+  if (!cobranza) return { success: false, message: 'Cobranza no encontrada.' };
+  if (cobranza.estatus === 'cobrado') return { success: false, message: 'Esta cobranza ya se encuentra cobrada.' };
+
+  const billetera = await database.getFirstAsync('SELECT id, balance FROM billeteras WHERE id = ? AND user_id = ?', [billeteraId, userId]);
+  if (!billetera) return { success: false, message: 'Billetera no encontrada.' };
+
+  let tipoObj = await database.getFirstAsync('SELECT id FROM tipos_movimiento WHERE user_id = ? AND nombre = ? COLLATE NOCASE', [userId, 'Cobranza']);
+  let tipoId;
+  if (tipoObj) {
+    tipoId = tipoObj.id;
+  } else {
+    const resTipo = await database.runAsync(
+      'INSERT INTO tipos_movimiento (user_id, tipo, nombre) VALUES (?, ?, ?)',
+      [userId, 'Ingreso', 'Cobranza']
+    );
+    tipoId = resTipo.lastInsertRowId;
+  }
+
+  const nuevoBalance = billetera.balance + cobranza.monto;
+  const descripcion = `Cobro de deuda a: ${cobranza.nombre}`;
+  
+  const hoy = new Date();
+  const d = String(hoy.getDate()).padStart(2, '0');
+  const m = String(hoy.getMonth() + 1).padStart(2, '0');
+  const a = hoy.getFullYear();
+  const fechaHoy = `${d}/${m}/${a}`;
+
+  try {
+    await database.runAsync('UPDATE billeteras SET balance = ? WHERE id = ?', [nuevoBalance, billeteraId]);
+    
+    const movResult = await database.runAsync(
+      'INSERT INTO movimientos (user_id, billetera_id, tipo_movimiento_id, monto, descripcion, fecha) VALUES (?, ?, ?, ?, ?, ?)',
+      [userId, billeteraId, tipoId, cobranza.monto, descripcion, fechaHoy]
+    );
+    
+    const movId = movResult.lastInsertRowId;
+
+    await database.runAsync(
+      'UPDATE cobranzas SET estatus = ?, movimiento_id = ? WHERE id = ?',
+      ['cobrado', movId, cobranzaId]
+    );
+
+    return { success: true, message: 'Cobranza procesada exitosamente.' };
+  } catch (e) {
+    console.error('[DB] Error al procesar cobranza:', e);
+    return { success: false, message: 'Ocurrió un error al procesar el cobro.' };
+  }
+}
+
+/**
+ * Elimina una cobranza. Si estaba cobrada, revierte la transacción.
+ */
+export async function deleteCobranza(cobranzaId, userId) {
+  const database = await getDB();
+  const cobranza = await database.getFirstAsync('SELECT * FROM cobranzas WHERE id = ? AND user_id = ?', [cobranzaId, userId]);
+  
+  if (!cobranza) return { success: false, message: 'Cobranza no encontrada.' };
+
+  try {
+    if (cobranza.estatus === 'cobrado' && cobranza.movimiento_id) {
+      // Intentamos eliminar el movimiento de ingreso, lo cual restaura la billetera (le quita el saldo)
+      const delMov = await deleteMovimiento(cobranza.movimiento_id, userId);
+      if (!delMov.success) {
+        return { success: false, message: 'No se puede eliminar la cobranza porque el balance de la billetera quedaría en negativo.' };
+      }
+    }
+    
+    await database.runAsync('DELETE FROM cobranzas WHERE id = ?', [cobranzaId]);
+    return { success: true, message: 'Cobranza eliminada exitosamente.' };
+  } catch (e) {
+    console.error('[DB] Error al eliminar cobranza:', e);
+    return { success: false, message: 'Error interno al eliminar la cobranza.' };
+  }
+}
+

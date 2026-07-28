@@ -8,6 +8,7 @@ export default function AdminOptionsMenu({
   onClose,
   onLogout,
   onChangePassword,
+  onNavigateOption,
   user,
   isDark,
   modalSlide,
@@ -107,6 +108,29 @@ export default function AdminOptionsMenu({
                   <Ionicons name="key-outline" size={20} color={theme.textPrimary} />
                   <Text style={[styles.optionText, { color: theme.textPrimary, fontFamily: Fonts.medium }]}>
                     Cambiar Contraseña
+                  </Text>
+                </View>
+              </Pressable>
+
+              {/* BOTÓN CRÉDITO Y COBRANZA */}
+              <Pressable
+                onPress={() => onNavigateOption && onNavigateOption('creditos')}
+                style={({ pressed }) => [
+                  styles.optionItem,
+                  {
+                    backgroundColor: pressed
+                      ? isDark
+                        ? 'rgba(255,255,255,0.1)'
+                        : 'rgba(0,0,0,0.05)'
+                      : 'transparent',
+                    borderColor: theme.inputBorder,
+                  },
+                ]}
+              >
+                <View style={[styles.optionIconBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F0F0F0' }]}>
+                  <Ionicons name="card-outline" size={20} color={theme.textPrimary} />
+                  <Text style={[styles.optionText, { color: theme.textPrimary, fontFamily: Fonts.medium }]}>
+                    Crédito y Cobranza
                   </Text>
                 </View>
               </Pressable>

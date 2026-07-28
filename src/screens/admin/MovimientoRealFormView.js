@@ -12,6 +12,7 @@ export default function MovimientoRealFormView({ isDark, onBack, onSaved, userId
   
   const [selectedBilletera, setSelectedBilletera] = useState(null);
   const [selectedTipo, setSelectedTipo] = useState(null);
+  const [selectedMoneda, setSelectedMoneda] = useState('VES');
   const [monto, setMonto] = useState('');
   const [descripcion, setDescripcion] = useState('');
   
@@ -89,6 +90,9 @@ export default function MovimientoRealFormView({ isDark, onBack, onSaved, userId
     }
   };
 
+  const availableMonedas = ['VES', 'USD', 'EUR'];
+  const filteredBilleteras = billeteras.filter(b => b.moneda_abreviatura === selectedMoneda);
+
   return (
     <View style={styles.container}>
       <View style={[styles.formHeader, { borderBottomColor: theme.inputBorder }]}>
@@ -103,6 +107,38 @@ export default function MovimientoRealFormView({ isDark, onBack, onSaved, userId
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+
+        {/* Selección de Moneda */}
+        <View style={styles.fieldContainer}>
+          <Text style={[styles.label, { color: theme.textPrimary, fontFamily: Fonts.medium }]}>
+            Moneda
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 5 }}>
+            {availableMonedas.map(m => {
+              const isSelected = selectedMoneda === m;
+              return (
+                <Pressable
+                  key={m}
+                  onPress={() => {
+                    setSelectedMoneda(m);
+                    setSelectedBilletera(null); // Reset wallet when changing currency
+                  }}
+                  style={[
+                    styles.chip,
+                    {
+                      backgroundColor: isSelected ? theme.accent : (isDark ? 'rgba(255,255,255,0.06)' : '#F0F0F0'),
+                      borderColor: isSelected ? theme.accent : theme.inputBorder,
+                    }
+                  ]}
+                >
+                  <Text style={[styles.chipText, { color: isSelected ? '#FFF' : theme.textSecondary, fontFamily: isSelected ? Fonts.bold : Fonts.regular }]}>
+                    {m}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
         
         {/* Selección de Billetera */}
         <View style={styles.fieldContainer}>
@@ -110,8 +146,8 @@ export default function MovimientoRealFormView({ isDark, onBack, onSaved, userId
             Billetera
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 5 }}>
-            {billeteras.length === 0 && <Text style={{ color: theme.textSecondary }}>No hay billeteras registradas.</Text>}
-            {billeteras.map(b => {
+            {filteredBilleteras.length === 0 && <Text style={{ color: theme.textSecondary }}>No hay billeteras registradas para esta moneda.</Text>}
+            {filteredBilleteras.map(b => {
               const isSelected = selectedBilletera === b.id;
               return (
                 <Pressable
