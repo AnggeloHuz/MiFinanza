@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
@@ -19,6 +19,11 @@ export default function BilleterasView({ isDark, billeterasList, onRefresh, user
   const [selectedBilletera, setSelectedBilletera] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Actualizar datos al entrar a la vista
+  useEffect(() => {
+    if (onRefresh) onRefresh();
+  }, []);
 
   // Filtrado en tiempo real
   const filteredBilleteras = useMemo(() => {
@@ -152,8 +157,8 @@ export default function BilleterasView({ isDark, billeterasList, onRefresh, user
                   <Text style={[styles.billeteraSubText, { color: theme.textSecondary, fontFamily: Fonts.regular }]}>
                     {item.codigo !== 'Sin código' ? `Código: ${item.codigo}` : 'Sin código bancario'}
                   </Text>
-                  <Text style={[styles.billeteraSubText, { color: theme.textPrimary, fontFamily: Fonts.medium, marginTop: 4 }]}>
-                    Balance: {formatCurrencyVE(item.balance)}
+                  <Text style={[styles.billeteraBalanceText, { color: theme.accent, fontFamily: Fonts.bold, marginTop: 6, fontSize: 18 }]}>
+                    {formatCurrencyVE(item.balance)} {item.moneda_abreviatura}
                   </Text>
                 </View>
 

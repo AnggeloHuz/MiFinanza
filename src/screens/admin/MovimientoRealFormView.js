@@ -65,6 +65,15 @@ export default function MovimientoRealFormView({ isDark, onBack, onSaved, userId
     const parts = fechaVisual.split('/');
     const fechaDB = `${parts[2]}-${parts[1]}-${parts[0]}`;
 
+    // Validar que no sea fecha futura
+    const inputDate = new Date(`${fechaDB}T00:00:00`);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (inputDate > today) {
+      return Alert.alert('Error', 'No puedes registrar un movimiento con una fecha futura.');
+    }
+
     const montoNum = parseFloat(monto.replace(',', '.'));
 
     try {
@@ -297,6 +306,7 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.xl,
     paddingBottom: 100,
   },
+
   fieldContainer: {
     marginBottom: Spacing.lg,
   },

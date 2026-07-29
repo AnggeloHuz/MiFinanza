@@ -5,17 +5,22 @@ import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 import CreditosView from './CreditosView';
 import CobranzasView from './CobranzasView';
 
-export default function CreditoCobranzaView({ isDark, userId }) {
+export default function CreditoCobranzaView({ isDark, userId, initialView = 'menu' }) {
   const theme = isDark ? Colors.dark : Colors.light;
 
   // 'menu' | 'creditos' | 'cobranza'
-  const [currentView, setCurrentView] = useState('menu');
+  const [currentView, setCurrentView] = useState(initialView);
+
+  // Sincronizar vista si se navega desde el dashboard
+  React.useEffect(() => {
+    setCurrentView(initialView);
+  }, [initialView]);
 
   if (currentView === 'creditos') {
     return (
-      <CreditosView 
-        isDark={isDark} 
-        userId={userId} 
+      <CreditosView
+        isDark={isDark}
+        userId={userId}
         onBackMenu={() => setCurrentView('menu')}
       />
     );
@@ -23,9 +28,9 @@ export default function CreditoCobranzaView({ isDark, userId }) {
 
   if (currentView === 'cobranza') {
     return (
-      <CobranzasView 
-        isDark={isDark} 
-        userId={userId} 
+      <CobranzasView
+        isDark={isDark}
+        userId={userId}
         onBackMenu={() => setCurrentView('menu')}
       />
     );
@@ -42,7 +47,7 @@ export default function CreditoCobranzaView({ isDark, userId }) {
           Seleccione una opción para continuar
         </Text>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           activeOpacity={0.8}
           style={[styles.menuCard, { backgroundColor: theme.cardBackground, borderColor: theme.inputBorder }]}
           onPress={() => setCurrentView('creditos')}
@@ -61,7 +66,7 @@ export default function CreditoCobranzaView({ isDark, userId }) {
           <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
         </TouchableOpacity>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           activeOpacity={0.8}
           style={[styles.menuCard, { backgroundColor: theme.cardBackground, borderColor: theme.inputBorder }]}
           onPress={() => setCurrentView('cobranza')}

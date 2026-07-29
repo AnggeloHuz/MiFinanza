@@ -116,6 +116,47 @@ export async function initDatabase() {
     );
   `);
 
+  // Migrar la tabla tasas_cambio si existe (para quitar el UNIQUE antiguo)
+  // Almacenamos temporalmente los datos
+  try {
+    await database.execAsync(`
+      CREATE TABLE IF NOT EXISTS tasas_cambio_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        moneda_origen TEXT NOT NULL,
+        moneda_destino TEXT NOT NULL,
+        tasa REAL NOT NULL,
+        fecha_actualizacion TEXT NOT NULL,
+        UNIQUE(moneda_origen, moneda_destino, fecha_actualizacion)
+      );
+      INSERT OR IGNORE INTO tasas_cambio_v2 (moneda_origen, moneda_destino, tasa, fecha_actualizacion)
+      SELECT moneda_origen, moneda_destino, tasa, fecha_actualizacion FROM tasas_cambio;
+      DROP TABLE tasas_cambio;
+    `);
+  } catch (e) {
+    // Si falla es que tasas_cambio_v2 ya es la principal o no existe tasas_cambio
+  }
+
+  // Crear tabla de tasas de cambio (ahora usa la nueva estructura si no existía)
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS tasas_cambio (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      moneda_origen TEXT NOT NULL,
+      moneda_destino TEXT NOT NULL,
+      tasa REAL NOT NULL,
+      fecha_actualizacion TEXT NOT NULL,
+      UNIQUE(moneda_origen, moneda_destino, fecha_actualizacion)
+    );
+  `);
+  
+  // Si venimos de la migración, pasamos los datos
+  try {
+    await database.execAsync(`
+      INSERT OR IGNORE INTO tasas_cambio (moneda_origen, moneda_destino, tasa, fecha_actualizacion)
+      SELECT moneda_origen, moneda_destino, tasa, fecha_actualizacion FROM tasas_cambio_v2;
+      DROP TABLE tasas_cambio_v2;
+    `);
+  } catch (e) {}
+
   // Insertar usuario semilla si no existe
   const existingUser = await database.getFirstAsync(
     'SELECT id FROM users WHERE usuario = ?',
@@ -577,7 +618,7 @@ export async function createCredito(userId, entidad, nombre, fecha_pago, monto, 
 export async function getAllCreditos(userId) {
   const database = await getDB();
   const creditos = await database.getAllAsync(
-    'SELECT * FROM creditos WHERE user_id = ? ORDER BY CASE WHEN estatus = "sin pagar" THEN 0 ELSE 1 END, fecha_pago ASC',
+    'SELECT * FROM creditos WHERE user_id = ? ORDER BY CASE WHEN estatus = "sin pagar" THEN 0 ELSE 1 END, substr(fecha_pago, 7, 4) || substr(fecha_pago, 4, 2) || substr(fecha_pago, 1, 2) ASC',
     [userId]
   );
   return creditos || [];
@@ -589,7 +630,7 @@ export async function getAllCreditos(userId) {
  * 2. Crea movimiento "Crédito" (Egreso).
  * 3. Actualiza el crédito a 'pagado' con movimiento_id.
  */
-export async function payCredito(creditoId, billeteraId, userId) {
+export async function payCredito(creditoId, billeteraId, userId, montoConvertido = null) {
   const database = await getDB();
 
   // 1. Obtener crédito
@@ -601,7 +642,9 @@ export async function payCredito(creditoId, billeteraId, userId) {
   const billetera = await database.getFirstAsync('SELECT id, balance FROM billeteras WHERE id = ? AND user_id = ?', [billeteraId, userId]);
   if (!billetera) return { success: false, message: 'Billetera no encontrada.' };
 
-  if (billetera.balance < credito.monto) {
+  const montoADescontar = montoConvertido !== null ? montoConvertido : credito.monto;
+
+  if (billetera.balance < montoADescontar) {
     return { success: false, message: 'La billetera no tiene fondos suficientes para pagar este crédito.' };
   }
 
@@ -619,8 +662,11 @@ export async function payCredito(creditoId, billeteraId, userId) {
   }
 
   // 4. Procesar la transacción
-  const nuevoBalance = billetera.balance - credito.monto;
-  const descripcion = `Pago de crédito a: ${credito.nombre}`;
+  const nuevoBalance = billetera.balance - montoADescontar;
+  let descripcion = `Pago de crédito a: ${credito.nombre}`;
+  if (montoConvertido !== null && montoConvertido !== credito.monto) {
+    descripcion += ` (Conv: ${credito.monto} ${credito.moneda})`;
+  }
   
   // Usamos la fecha actual en formato dd/mm/aaaa
   const hoy = new Date();
@@ -634,7 +680,7 @@ export async function payCredito(creditoId, billeteraId, userId) {
     
     const movResult = await database.runAsync(
       'INSERT INTO movimientos (user_id, billetera_id, tipo_movimiento_id, monto, descripcion, fecha) VALUES (?, ?, ?, ?, ?, ?)',
-      [userId, billeteraId, tipoId, credito.monto, descripcion, fechaHoy]
+      [userId, billeteraId, tipoId, montoADescontar, descripcion, fechaHoy]
     );
     
     const movId = movResult.lastInsertRowId;
@@ -675,6 +721,84 @@ export async function deleteCredito(creditoId, userId) {
 }
 
 // ============================================================
+// TASAS DE CAMBIO
+// ============================================================
+
+/**
+ * Guarda o actualiza una tasa de cambio.
+ */
+export async function updateTasaCambio(monedaOrigen, monedaDestino, tasa, fechaStr) {
+  const database = await getDB();
+  try {
+    await database.runAsync(
+      `INSERT INTO tasas_cambio (moneda_origen, moneda_destino, tasa, fecha_actualizacion) 
+       VALUES (?, ?, ?, ?) 
+       ON CONFLICT(moneda_origen, moneda_destino, fecha_actualizacion) 
+       DO UPDATE SET tasa = excluded.tasa`,
+      [monedaOrigen, monedaDestino, tasa, fechaStr]
+    );
+    return { success: true };
+  } catch (error) {
+    console.error('[DB] Error al guardar tasa de cambio:', error);
+    return { success: false };
+  }
+}
+
+/**
+ * Obtiene la TASA MÁS RECIENTE de cada moneda.
+ */
+export async function getTasasCambio() {
+  try {
+    const historial = await getHistorialTasasCambio();
+    if (!historial || historial.length === 0) return [];
+    
+    // El historial ya podría venir con cierto orden, pero nos aseguramos
+    // de ordenarlo por fecha descendente (más reciente primero)
+    const sortedHist = historial.sort((a, b) => {
+      const parseDate = (str) => {
+        const [d, m, y] = str.split('/');
+        return new Date(y, m - 1, d).getTime();
+      };
+      return parseDate(b.fecha_actualizacion) - parseDate(a.fecha_actualizacion);
+    });
+    
+    // Extraer solo la tasa más reciente para cada par de monedas
+    const latestRates = [];
+    const seenPairs = new Set();
+    
+    for (const record of sortedHist) {
+      const pair = `${record.moneda_origen}-${record.moneda_destino}`;
+      if (!seenPairs.has(pair)) {
+        seenPairs.add(pair);
+        latestRates.push(record);
+      }
+    }
+    
+    return latestRates;
+  } catch (error) {
+    console.error('[DB] Error al obtener tasas de cambio recientes:', error);
+    return [];
+  }
+}
+
+/**
+ * Obtiene todo el historial de tasas de cambio ordenado por fecha descendente.
+ */
+export async function getHistorialTasasCambio() {
+  const database = await getDB();
+  try {
+    // SQLite no tiene un tipo de fecha estricto por defecto si usamos DD/MM/YYYY.
+    // Como las guardamos así, el ORDER BY id DESC servirá cronológicamente 
+    // asumiendo que se insertan en orden cronológico real.
+    const tasas = await database.getAllAsync('SELECT * FROM tasas_cambio ORDER BY id DESC');
+    return tasas || [];
+  } catch (error) {
+    console.error('[DB] Error al obtener historial de tasas:', error);
+    return [];
+  }
+}
+
+// ============================================================
 // COBRANZAS (Cuentas por Cobrar)
 // ============================================================
 
@@ -704,7 +828,7 @@ export async function createCobranza(userId, entidad, nombre, fecha_cobro, monto
 export async function getAllCobranzas(userId) {
   const database = await getDB();
   const cobranzas = await database.getAllAsync(
-    'SELECT * FROM cobranzas WHERE user_id = ? ORDER BY CASE WHEN estatus = "sin cobrar" THEN 0 ELSE 1 END, fecha_cobro ASC',
+    'SELECT * FROM cobranzas WHERE user_id = ? ORDER BY CASE WHEN estatus = "sin cobrar" THEN 0 ELSE 1 END, substr(fecha_cobro, 7, 4) || substr(fecha_cobro, 4, 2) || substr(fecha_cobro, 1, 2) ASC',
     [userId]
   );
   return cobranzas || [];
@@ -716,7 +840,7 @@ export async function getAllCobranzas(userId) {
  * 2. Crea movimiento "Cobranza" (Ingreso).
  * 3. Actualiza la cobranza a 'cobrado' con movimiento_id.
  */
-export async function collectCobranza(cobranzaId, billeteraId, userId) {
+export async function collectCobranza(cobranzaId, billeteraId, userId, montoConvertido = null) {
   const database = await getDB();
 
   const cobranza = await database.getFirstAsync('SELECT * FROM cobranzas WHERE id = ? AND user_id = ?', [cobranzaId, userId]);
@@ -738,8 +862,14 @@ export async function collectCobranza(cobranzaId, billeteraId, userId) {
     tipoId = resTipo.lastInsertRowId;
   }
 
-  const nuevoBalance = billetera.balance + cobranza.monto;
-  const descripcion = `Cobro de deuda a: ${cobranza.nombre}`;
+  const montoAIngresar = montoConvertido !== null ? montoConvertido : cobranza.monto;
+
+  // 4. Procesar transacción
+  const nuevoBalance = billetera.balance + montoAIngresar;
+  let descripcion = `Cobro de: ${cobranza.nombre}`;
+  if (montoConvertido !== null && montoConvertido !== cobranza.monto) {
+    descripcion += ` (Conv: ${cobranza.monto} ${cobranza.moneda})`;
+  }
   
   const hoy = new Date();
   const d = String(hoy.getDate()).padStart(2, '0');
@@ -752,7 +882,7 @@ export async function collectCobranza(cobranzaId, billeteraId, userId) {
     
     const movResult = await database.runAsync(
       'INSERT INTO movimientos (user_id, billetera_id, tipo_movimiento_id, monto, descripcion, fecha) VALUES (?, ?, ?, ?, ?, ?)',
-      [userId, billeteraId, tipoId, cobranza.monto, descripcion, fechaHoy]
+      [userId, billeteraId, tipoId, montoAIngresar, descripcion, fechaHoy]
     );
     
     const movId = movResult.lastInsertRowId;

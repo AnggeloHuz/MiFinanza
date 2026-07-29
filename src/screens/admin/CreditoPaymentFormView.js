@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIn
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 import { formatCurrencyVE } from '../../utils/currencyFormatter';
-import { getAllBilleteras, payCredito } from '../../database/database';
+import { getAllBilleteras, payCredito, getTasasCambio } from '../../database/database';
 
 export default function CreditoPaymentFormView({ isDark, userId, credito, onBack, onSaved }) {
   const theme = isDark ? Colors.dark : Colors.light;
@@ -12,6 +12,7 @@ export default function CreditoPaymentFormView({ isDark, userId, credito, onBack
   const [selectedBilleteraId, setSelectedBilleteraId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [tasas, setTasas] = useState([]);
 
   useEffect(() => {
     fetchBilleteras();
@@ -21,11 +22,32 @@ export default function CreditoPaymentFormView({ isDark, userId, credito, onBack
     try {
       const data = await getAllBilleteras(userId);
       setBilleteras(data);
+      const tasasData = await getTasasCambio();
+      setTasas(tasasData);
     } catch (error) {
       console.error('Error al cargar billeteras:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const convertirMoneda = (monto, monedaOrigen, monedaDestino) => {
+    if (monedaOrigen === monedaDestino) return monto;
+
+    const tasaUsd = tasas.find(t => t.moneda_origen === 'USD' && t.moneda_destino === 'VES')?.tasa || 1;
+    const tasaEur = tasas.find(t => t.moneda_origen === 'EUR' && t.moneda_destino === 'VES')?.tasa || 1;
+
+    // Llevar a VES base
+    let montoEnBs = monto;
+    if (monedaOrigen === 'USD') montoEnBs = monto * tasaUsd;
+    if (monedaOrigen === 'EUR') montoEnBs = monto * tasaEur;
+
+    // Convertir a Destino
+    if (monedaDestino === 'VES') return montoEnBs;
+    if (monedaDestino === 'USD') return montoEnBs / tasaUsd;
+    if (monedaDestino === 'EUR') return montoEnBs / tasaEur;
+
+    return monto;
   };
 
   const handlePay = async () => {
@@ -37,21 +59,28 @@ export default function CreditoPaymentFormView({ isDark, userId, credito, onBack
     const billeteraSeleccionada = billeteras.find(b => b.id === selectedBilleteraId);
     if (!billeteraSeleccionada) return;
 
-    if (billeteraSeleccionada.balance < credito.monto) {
+    const montoConvertido = convertirMoneda(credito.monto, credito.moneda, billeteraSeleccionada.moneda_abreviatura);
+
+    if (billeteraSeleccionada.balance < montoConvertido) {
       Alert.alert('Saldo Insuficiente', 'La billetera seleccionada no tiene fondos suficientes para cubrir este crédito.');
       return;
     }
 
+    let confirmMessage = `¿Estás seguro de que deseas pagar ${formatCurrencyVE(credito.monto)} ${credito.moneda} usando la billetera "${billeteraSeleccionada.nombre}"?`;
+    if (credito.moneda !== billeteraSeleccionada.moneda_abreviatura) {
+      confirmMessage += `\n\nSe descontarán ${formatCurrencyVE(montoConvertido)} ${billeteraSeleccionada.moneda_abreviatura} de tu billetera.`;
+    }
+
     Alert.alert(
       'Confirmar Pago',
-      `¿Estás seguro de que deseas pagar ${formatCurrencyVE(credito.monto)} usando la billetera "${billeteraSeleccionada.nombre}"?`,
+      confirmMessage,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Confirmar',
           onPress: async () => {
             setProcessing(true);
-            const res = await payCredito(credito.id, selectedBilleteraId, userId);
+            const res = await payCredito(credito.id, selectedBilleteraId, userId, montoConvertido);
             setProcessing(false);
 
             if (res.success) {
@@ -100,17 +129,19 @@ export default function CreditoPaymentFormView({ isDark, userId, credito, onBack
           <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 20 }} />
         ) : (
           (() => {
-            const filteredBilleteras = billeteras.filter(b => b.moneda_abreviatura === credito.moneda);
-            if (filteredBilleteras.length === 0) {
+            if (billeteras.length === 0) {
               return (
                 <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>
-                  No tienes billeteras en {credito.moneda} para realizar este pago.
+                  No tienes billeteras registradas para realizar este pago.
                 </Text>
               );
             }
-            return filteredBilleteras.map(b => {
+            return billeteras.map(b => {
               const isSelected = selectedBilleteraId === b.id;
-              const hasEnoughFunds = b.balance >= credito.monto;
+              
+              const montoConvertido = convertirMoneda(credito.monto, credito.moneda, b.moneda_abreviatura);
+              const hasEnoughFunds = b.balance >= montoConvertido;
+              const requiresConversion = credito.moneda !== b.moneda_abreviatura;
 
               return (
                 <TouchableOpacity
@@ -130,6 +161,11 @@ export default function CreditoPaymentFormView({ isDark, userId, credito, onBack
                     <Text style={[styles.walletBalance, { color: hasEnoughFunds ? theme.textPrimary : '#EF4444' }]}>
                       Disponible: {formatCurrencyVE(b.balance)} {b.moneda_abreviatura}
                     </Text>
+                    {requiresConversion && (
+                      <Text style={{ color: theme.accent, fontSize: 12, marginTop: 4, fontFamily: Fonts.medium }}>
+                        Equivale a descontar: {formatCurrencyVE(montoConvertido)} {b.moneda_abreviatura}
+                      </Text>
+                    )}
                   </View>
 
                   <View style={[

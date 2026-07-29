@@ -87,6 +87,22 @@ export default function HistorialMovimientosView({ isDark, userId, onBackMenu, i
       });
     }
 
+    // Ordenar de más reciente a más antiguo
+    result.sort((a, b) => {
+      // Función auxiliar para parsear ambas formas posibles
+      const parseDate = (dStr) => {
+        if (!dStr) return 0;
+        if (dStr.includes('/')) {
+          const parts = dStr.split('/');
+          if (parts.length === 3) {
+            return new Date(`${parts[2]}-${parts[1]}-${parts[0]}T00:00:00`).getTime();
+          }
+        }
+        return new Date(`${dStr}T00:00:00`).getTime();
+      };
+      return parseDate(b.fecha) - parseDate(a.fecha) || b.id - a.id;
+    });
+
     return result;
   }, [movimientos, filterTipo, searchQuery, fechaInicio, fechaFin]);
 

@@ -3,6 +3,7 @@ import { View, StyleSheet, Animated, useColorScheme, Alert } from 'react-native'
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../context/AuthContext';
 import { getAllBilleteras, getAllTiposMovimiento, updateUserPassword } from '../database/database';
+import { syncExchangeRates, syncHistoricalRatesBackfill } from '../services/api';
 import { Colors } from '../constants/theme';
 
 // Componentes modulares
@@ -15,6 +16,7 @@ import DashboardView from './admin/DashboardView';
 import BilleterasView from './admin/BilleterasView';
 import MovimientosView from './admin/MovimientosView';
 import CreditoCobranzaView from './admin/CreditoCobranzaView';
+import TasasCambiariasView from './admin/TasasCambiariasView';
 
 export default function MainScreen() {
   const colorScheme = useColorScheme();
@@ -31,6 +33,7 @@ export default function MainScreen() {
   // Params para navegación cruzada
   const [movimientosInitialView, setMovimientosInitialView] = useState('menu');
   const [movimientosFilter, setMovimientosFilter] = useState('');
+  const [creditosInitialView, setCreditosInitialView] = useState('menu');
 
   // Animaciones de transición
   const contentFade = useRef(new Animated.Value(1)).current;
@@ -41,6 +44,11 @@ export default function MainScreen() {
     if (user?.id) {
       fetchBilleteras();
       fetchTiposMovimiento();
+      // Sincronizar tasas de cambio en segundo plano
+      syncExchangeRates().then(() => {
+        // Una vez que termina la sincronización actual, validamos si hace falta el backfill de 30 días
+        syncHistoricalRatesBackfill(30).catch(console.error);
+      }).catch(console.error);
     }
   }, [user?.id]);
 
@@ -71,6 +79,10 @@ export default function MainScreen() {
     if (tabId === 'movimientos') {
       setMovimientosInitialView(params.initialView || 'menu');
       setMovimientosFilter(params.filter || '');
+    }
+
+    if (tabId === 'creditos') {
+      setCreditosInitialView(params.initialView || 'menu');
     }
 
     if (tabId === activeTab) return;
@@ -163,6 +175,8 @@ export default function MainScreen() {
         return 'Movimientos';
       case 'creditos':
         return 'Crédito y Cobranza';
+      case 'tasas':
+        return 'Tasas Cambiarias';
       default:
         return 'Dashboard';
     }
@@ -190,29 +204,40 @@ export default function MainScreen() {
         ]}
       >
         {activeTab === 'dashboard' && (
-          <DashboardView isDark={isDark} user={user} />
+          <DashboardView 
+            isDark={isDark} 
+            user={user} 
+            onNavigate={(tab, params) => changeTab(tab, params)} 
+          />
         )}
         {activeTab === 'billeteras' && (
-          <BilleterasView 
-            isDark={isDark} 
-            billeterasList={billeterasList} 
-            onRefresh={fetchBilleteras} 
-            userId={user?.id} 
+          <BilleterasView
+            isDark={isDark}
+            billeterasList={billeterasList}
+            onRefresh={fetchBilleteras}
+            userId={user?.id}
             onGoToHistory={(walletName) => changeTab('movimientos', { initialView: 'historial', filter: walletName })}
           />
         )}
         {activeTab === 'movimientos' && (
-          <MovimientosView 
-            isDark={isDark} 
-            tiposMovimientoList={tiposMovimientoList} 
-            onRefresh={fetchTiposMovimiento} 
-            userId={user?.id} 
+          <MovimientosView
+            isDark={isDark}
+            tiposMovimientoList={tiposMovimientoList}
+            onRefresh={fetchTiposMovimiento}
+            userId={user?.id}
             initialView={movimientosInitialView}
             initialFilter={movimientosFilter}
           />
         )}
         {activeTab === 'creditos' && (
-          <CreditoCobranzaView isDark={isDark} userId={user?.id} />
+          <CreditoCobranzaView 
+            isDark={isDark} 
+            userId={user?.id} 
+            initialView={creditosInitialView}
+          />
+        )}
+        {activeTab === 'tasas' && (
+          <TasasCambiariasView isDark={isDark} />
         )}
       </Animated.View>
 

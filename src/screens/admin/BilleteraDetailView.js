@@ -93,6 +93,14 @@ export default function BilleteraDetailView({ billetera, isDark, onBack, onRefre
           </Text>
         </View>
 
+        {/* Tarjeta de Balance Destacado */}
+        <View style={[styles.balanceCard, { backgroundColor: theme.accent, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
+          <Text style={[styles.balanceLabel, { color: 'rgba(255,255,255,0.8)' }]}>Balance Actual</Text>
+          <Text style={[styles.balanceAmount, { color: '#FFF' }]}>
+            {formatCurrencyVE(billetera.balance)} <Text style={styles.balanceCurrency}>{billetera.moneda_abreviatura}</Text>
+          </Text>
+        </View>
+
         {/* Información detallada */}
         <View style={[styles.infoCard, { backgroundColor: theme.cardBackground, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
           <Text style={[styles.sectionTitle, { color: theme.textPrimary, fontFamily: Fonts.medium }]}>
@@ -113,13 +121,6 @@ export default function BilleteraDetailView({ billetera, isDark, onBack, onRefre
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Moneda:</Text>
             <Text style={[styles.infoValue, { color: theme.textPrimary }]}>
               {billetera.moneda} ({billetera.moneda_abreviatura})
-            </Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Balance:</Text>
-            <Text style={[styles.infoValue, { color: theme.textPrimary }]}>
-              {formatCurrencyVE(billetera.balance)} {billetera.moneda_abreviatura}
             </Text>
           </View>
 
@@ -145,12 +146,14 @@ export default function BilleteraDetailView({ billetera, isDark, onBack, onRefre
             <Text style={styles.actionBtnText}>Ver Historial de Movimientos</Text>
           </TouchableOpacity>
 
+          {/* Opción de editar oculta 
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: theme.accent }]}
             onPress={() => setShowEditForm(true)}
           >
             <Text style={styles.actionBtnText}>Editar Billetera</Text>
           </TouchableOpacity>
+          */}
 
           <TouchableOpacity
             style={[styles.actionBtn, styles.deleteBtn]}
@@ -220,6 +223,26 @@ const styles = StyleSheet.create({
   },
   profileRole: {
     fontSize: 14,
+  },
+  balanceCard: {
+    padding: Spacing.xl,
+    borderRadius: BorderRadius.lg,
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
+    borderWidth: 1,
+  },
+  balanceLabel: {
+    fontSize: 14,
+    fontFamily: Fonts.medium,
+    marginBottom: Spacing.sm,
+  },
+  balanceAmount: {
+    fontSize: 32,
+    fontFamily: Fonts.bold,
+  },
+  balanceCurrency: {
+    fontSize: 18,
+    fontFamily: Fonts.medium,
   },
   infoCard: {
     padding: Spacing.lg,

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIn
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 import { formatCurrencyVE } from '../../utils/currencyFormatter';
-import { getAllBilleteras, collectCobranza } from '../../database/database';
+import { getAllBilleteras, collectCobranza, getTasasCambio } from '../../database/database';
 
 export default function CobranzaPaymentFormView({ isDark, userId, cobranza, onBack, onSaved }) {
   const theme = isDark ? Colors.dark : Colors.light;
@@ -12,6 +12,7 @@ export default function CobranzaPaymentFormView({ isDark, userId, cobranza, onBa
   const [selectedBilleteraId, setSelectedBilleteraId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [tasas, setTasas] = useState([]);
 
   useEffect(() => {
     fetchBilleteras();
@@ -21,11 +22,32 @@ export default function CobranzaPaymentFormView({ isDark, userId, cobranza, onBa
     try {
       const data = await getAllBilleteras(userId);
       setBilleteras(data);
+      const tasasData = await getTasasCambio();
+      setTasas(tasasData);
     } catch (error) {
       console.error('Error al cargar billeteras:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const convertirMoneda = (monto, monedaOrigen, monedaDestino) => {
+    if (monedaOrigen === monedaDestino) return monto;
+
+    const tasaUsd = tasas.find(t => t.moneda_origen === 'USD' && t.moneda_destino === 'VES')?.tasa || 1;
+    const tasaEur = tasas.find(t => t.moneda_origen === 'EUR' && t.moneda_destino === 'VES')?.tasa || 1;
+
+    // Llevar a VES base
+    let montoEnBs = monto;
+    if (monedaOrigen === 'USD') montoEnBs = monto * tasaUsd;
+    if (monedaOrigen === 'EUR') montoEnBs = monto * tasaEur;
+
+    // Convertir a Destino
+    if (monedaDestino === 'VES') return montoEnBs;
+    if (monedaDestino === 'USD') return montoEnBs / tasaUsd;
+    if (monedaDestino === 'EUR') return montoEnBs / tasaEur;
+
+    return monto;
   };
 
   const handlePay = async () => {
@@ -37,16 +59,23 @@ export default function CobranzaPaymentFormView({ isDark, userId, cobranza, onBa
     const billeteraSeleccionada = billeteras.find(b => b.id === selectedBilleteraId);
     if (!billeteraSeleccionada) return;
 
+    const montoConvertido = convertirMoneda(cobranza.monto, cobranza.moneda, billeteraSeleccionada.moneda_abreviatura);
+
+    let confirmMessage = `¿Estás seguro de que deseas registrar el cobro de ${formatCurrencyVE(cobranza.monto)} ${cobranza.moneda} en la billetera "${billeteraSeleccionada.nombre}"?`;
+    if (cobranza.moneda !== billeteraSeleccionada.moneda_abreviatura) {
+      confirmMessage += `\n\nSe ingresarán ${formatCurrencyVE(montoConvertido)} ${billeteraSeleccionada.moneda_abreviatura} a tu billetera.`;
+    }
+
     Alert.alert(
       'Confirmar Cobro',
-      `¿Estás seguro de que deseas registrar el cobro de ${formatCurrencyVE(cobranza.monto)} ${cobranza.moneda} en la billetera "${billeteraSeleccionada.nombre}"?`,
+      confirmMessage,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Confirmar',
           onPress: async () => {
             setProcessing(true);
-            const res = await collectCobranza(cobranza.id, selectedBilleteraId, userId);
+            const res = await collectCobranza(cobranza.id, selectedBilleteraId, userId, montoConvertido);
             setProcessing(false);
 
             if (res.success) {
@@ -95,16 +124,17 @@ export default function CobranzaPaymentFormView({ isDark, userId, cobranza, onBa
           <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 20 }} />
         ) : (
           (() => {
-            const filteredBilleteras = billeteras.filter(b => b.moneda_abreviatura === cobranza.moneda);
-            if (filteredBilleteras.length === 0) {
+            if (billeteras.length === 0) {
               return (
                 <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>
-                  No tienes billeteras en {cobranza.moneda} para recibir este pago.
+                  No tienes billeteras registradas para recibir este cobro.
                 </Text>
               );
             }
-            return filteredBilleteras.map(b => {
+            return billeteras.map(b => {
               const isSelected = selectedBilleteraId === b.id;
+              const montoConvertido = convertirMoneda(cobranza.monto, cobranza.moneda, b.moneda_abreviatura);
+              const requiresConversion = cobranza.moneda !== b.moneda_abreviatura;
 
               return (
                 <TouchableOpacity
@@ -113,27 +143,32 @@ export default function CobranzaPaymentFormView({ isDark, userId, cobranza, onBa
                   onPress={() => setSelectedBilleteraId(b.id)}
                   style={[
                     styles.walletCard,
-                    { backgroundColor: theme.cardBackground, borderColor: isSelected ? '#10B981' : theme.inputBorder }
+                    { backgroundColor: theme.cardBackground, borderColor: isSelected ? theme.accent : theme.inputBorder }
                   ]}
                 >
                   <View style={styles.walletInfo}>
                     <Text style={[styles.walletName, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
                       {b.nombre}
                     </Text>
-                    <Text style={[styles.walletBalance, { color: theme.textSecondary }]}>
-                      Balance actual: {formatCurrencyVE(b.balance)} {b.moneda_abreviatura}
+                    <Text style={[styles.walletBalance, { color: theme.textPrimary }]}>
+                      Actual: {formatCurrencyVE(b.balance)} {b.moneda_abreviatura}
                     </Text>
+                    {requiresConversion && (
+                      <Text style={{ color: '#10B981', fontSize: 12, marginTop: 4, fontFamily: Fonts.medium }}>
+                        Equivale a recibir: +{formatCurrencyVE(montoConvertido)} {b.moneda_abreviatura}
+                      </Text>
+                    )}
                   </View>
-                  
+
                   <View style={[
                     styles.radioCircle,
-                    { borderColor: isSelected ? '#10B981' : theme.textSecondary }
+                    { borderColor: isSelected ? theme.accent : theme.textSecondary }
                   ]}>
-                    {isSelected && <View style={[styles.radioDot, { backgroundColor: '#10B981' }]} />}
+                    {isSelected && <View style={[styles.radioDot, { backgroundColor: theme.accent }]} />}
                   </View>
                 </TouchableOpacity>
               );
-            });
+            })
           })()
         )}
 
