@@ -49,11 +49,29 @@ export default function HistorialMovimientosView({ isDark, userId, onBackMenu, i
     setter(formatted);
   };
 
-  const parseVisualDate = (vd) => {
-    if (vd.length !== 10) return null;
-    const parts = vd.split('/');
-    if (parts.length !== 3) return null;
-    return new Date(`${parts[2]}-${parts[1]}-${parts[0]}T00:00:00`);
+  const parseToStandardDate = (dStr) => {
+    if (!dStr) return null;
+    let s = String(dStr).trim();
+    if (s.includes('/')) {
+      const parts = s.split('/');
+      if (parts.length === 3) {
+        return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      }
+    } else if (s.includes('-')) {
+      const datePart = s.split(' ')[0].split('T')[0];
+      const parts = datePart.split('-');
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          // YYYY-MM-DD
+          return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        } else {
+          // DD-MM-YYYY
+          return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+        }
+      }
+    }
+    const d = new Date(dStr);
+    return isNaN(d.getTime()) ? null : d;
   };
 
   const filteredMovimientos = useMemo(() => {
@@ -68,39 +86,34 @@ export default function HistorialMovimientosView({ isDark, userId, onBackMenu, i
     if (searchQuery.trim()) {
       const lowerQuery = searchQuery.toLowerCase();
       result = result.filter(m => 
-        m.tipo_nombre.toLowerCase().includes(lowerQuery) ||
-        m.billetera_nombre.toLowerCase().includes(lowerQuery)
+        (m.tipo_nombre && m.tipo_nombre.toLowerCase().includes(lowerQuery)) ||
+        (m.billetera_nombre && m.billetera_nombre.toLowerCase().includes(lowerQuery)) ||
+        (m.descripcion && m.descripcion.toLowerCase().includes(lowerQuery))
       );
     }
 
     // Filtro por rango de fechas
-    const dInicio = parseVisualDate(fechaInicio);
-    const dFin = parseVisualDate(fechaFin);
+    const dInicio = parseToStandardDate(fechaInicio);
+    const dFin = parseToStandardDate(fechaFin);
 
     if (dInicio || dFin) {
+      if (dInicio) dInicio.setHours(0, 0, 0, 0);
+      if (dFin) dFin.setHours(23, 59, 59, 999);
+
       result = result.filter(m => {
-        const movDate = new Date(`${m.fecha}T00:00:00`);
-        let valid = true;
-        if (dInicio && movDate < dInicio) valid = false;
-        if (dFin && movDate > dFin) valid = false;
-        return valid;
+        const movDate = parseToStandardDate(m.fecha);
+        if (!movDate) return true; // Si no tiene fecha válida, no descartar por error
+        if (dInicio && movDate.getTime() < dInicio.getTime()) return false;
+        if (dFin && movDate.getTime() > dFin.getTime()) return false;
+        return true;
       });
     }
 
     // Ordenar de más reciente a más antiguo
     result.sort((a, b) => {
-      // Función auxiliar para parsear ambas formas posibles
-      const parseDate = (dStr) => {
-        if (!dStr) return 0;
-        if (dStr.includes('/')) {
-          const parts = dStr.split('/');
-          if (parts.length === 3) {
-            return new Date(`${parts[2]}-${parts[1]}-${parts[0]}T00:00:00`).getTime();
-          }
-        }
-        return new Date(`${dStr}T00:00:00`).getTime();
-      };
-      return parseDate(b.fecha) - parseDate(a.fecha) || b.id - a.id;
+      const dateA = parseToStandardDate(a.fecha)?.getTime() || 0;
+      const dateB = parseToStandardDate(b.fecha)?.getTime() || 0;
+      return dateB - dateA || b.id - a.id;
     });
 
     return result;

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Activi
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 import { getTasasCambio, getHistorialTasasCambio } from '../../database/database';
+import { formatCurrencyVE } from '../../utils/currencyFormatter';
 import { syncExchangeRates } from '../../services/api';
 
 export default function TasasCambiariasView({ isDark }) {
@@ -73,10 +74,6 @@ export default function TasasCambiariasView({ isDark }) {
   }, [historial]);
 
   // Formato para mostrar precios
-  const formatCurrencyVE = (num) => {
-    if (!num && num !== 0) return '0,00';
-    return Number(num).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
 
   const getHoyString = () => {
     const hoy = new Date();

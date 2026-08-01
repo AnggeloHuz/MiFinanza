@@ -575,7 +575,7 @@ export async function getAllMovimientos(userId) {
   const database = await getDB();
   const query = `
     SELECT 
-      m.id, m.monto, m.descripcion, m.fecha, m.created_at,
+      m.id, m.monto, m.descripcion, m.fecha, m.created_at, m.billetera_id,
       b.nombre as billetera_nombre, b.moneda_abreviatura as moneda,
       t.nombre as tipo_nombre, t.tipo as categoria
     FROM movimientos m

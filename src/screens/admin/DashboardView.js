@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, TouchableOpacity, TextInput, Alert, Modal } from 'react-native';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
-import { getAllBilleteras, getAllCreditos, getAllCobranzas, getTasasCambio } from '../../database/database';
+import { getAllBilleteras, getAllCreditos, getAllCobranzas, getTasasCambio, getAllMovimientos, getHistorialTasasCambio } from '../../database/database';
 import { formatCurrencyVE } from '../../utils/currencyFormatter';
 
 export default function DashboardView({ isDark, user, onNavigate }) {
@@ -12,22 +12,32 @@ export default function DashboardView({ isDark, user, onNavigate }) {
   const [creditos, setCreditos] = useState([]);
   const [cobranzas, setCobranzas] = useState([]);
   const [tasas, setTasas] = useState([]);
+  const [movimientos, setMovimientos] = useState([]);
+  const [historialTasas, setHistorialTasas] = useState([]);
   const [monedaSeleccionada, setMonedaSeleccionada] = useState('VES');
+  const [selectedDateOption, setSelectedDateOption] = useState('Hoy');
+  const [showDateModal, setShowDateModal] = useState(false);
+  const [isCustomDateMode, setIsCustomDateMode] = useState(false);
+  const [customDateInput, setCustomDateInput] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = async () => {
     if (!user?.id) return;
     try {
-      const [bills, creds, cobs, rates] = await Promise.all([
+      const [bills, creds, cobs, rates, movs, histRates] = await Promise.all([
         getAllBilleteras(user.id),
         getAllCreditos(user.id),
         getAllCobranzas(user.id),
-        getTasasCambio()
+        getTasasCambio(),
+        getAllMovimientos(user.id),
+        getHistorialTasasCambio()
       ]);
       setBilleteras(bills);
       setCreditos(creds);
       setCobranzas(cobs);
       setTasas(rates);
+      setMovimientos(movs);
+      setHistorialTasas(histRates);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     }
@@ -70,44 +80,186 @@ export default function DashboardView({ isDark, user, onNavigate }) {
     return result;
   }, [tasas]);
 
-  // Cálculos de Patrimonio
   const patrimonioData = useMemo(() => {
     let neto = 0;
     let deudas = 0;
     let porCobrar = 0;
 
-    // Sumar Billeteras
-    billeteras.forEach(bill => {
-      neto += convertirMoneda(bill.balance, bill.moneda_abreviatura, monedaSeleccionada);
-    });
+    const today = new Date();
+    let targetDateObj = new Date(today);
+    targetDateObj.setHours(23, 59, 59, 999);
 
-    // Sumar Deudas (Créditos sin pagar)
-    creditos.forEach(cred => {
-      if (cred.estatus === 'sin pagar') {
-        deudas += convertirMoneda(cred.monto, cred.moneda, monedaSeleccionada);
+    if (selectedDateOption === 'Ayer') {
+      targetDateObj.setDate(targetDateObj.getDate() - 1);
+    } else if (selectedDateOption === 'Hace 7 días') {
+      targetDateObj.setDate(targetDateObj.getDate() - 7);
+    } else if (selectedDateOption === 'Hace 30 días') {
+      targetDateObj.setDate(targetDateObj.getDate() - 30);
+    } else if (selectedDateOption !== 'Hoy') {
+      const parts = selectedDateOption.split('/');
+      if (parts.length === 3) {
+        const d = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        const y = parseInt(parts[2], 10);
+        if (!isNaN(d) && !isNaN(m) && !isNaN(y)) {
+          targetDateObj = new Date(y, m, d, 23, 59, 59, 999);
+        }
       }
-    });
+    }
 
-    // Sumar Por Cobrar (Cobranzas sin cobrar)
-    cobranzas.forEach(cob => {
-      if (cob.estatus === 'sin cobrar') {
-        porCobrar += convertirMoneda(cob.monto, cob.moneda, monedaSeleccionada);
+    const parseToStandardDate = (dStr) => {
+      if (!dStr) return null;
+      let s = String(dStr).trim();
+      if (s.includes('/')) {
+        const parts = s.split('/');
+        if (parts.length === 3) {
+          return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+        }
+      } else if (s.includes('-')) {
+        const datePart = s.split(' ')[0].split('T')[0];
+        const parts = datePart.split('-');
+        if (parts.length === 3) {
+          if (parts[0].length === 4) {
+            return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          } else {
+            return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+          }
+        }
       }
-    });
-
-    const total = neto - deudas + porCobrar;
-
-    return {
-      neto,
-      deudas,
-      porCobrar,
-      total
+      const d = new Date(dStr);
+      return isNaN(d.getTime()) ? null : d;
     };
-  }, [billeteras, creditos, cobranzas, monedaSeleccionada, convertirMoneda]);
+
+    const isHistorical = selectedDateOption !== 'Hoy';
+    const targetTs = targetDateObj.getTime();
+
+    let ratesToUse = tasas;
+    if (isHistorical && historialTasas.length > 0) {
+      let bestRates = {};
+
+      historialTasas.forEach(ht => {
+        const htDate = parseToStandardDate(ht.fecha_actualizacion);
+        if (htDate) {
+          htDate.setHours(23, 59, 59, 999);
+          const htTs = htDate.getTime();
+          if (htTs <= targetTs) {
+            const key = `${ht.moneda_origen}-${ht.moneda_destino}`;
+            if (!bestRates[key] || htTs > bestRates[key].ts) {
+              bestRates[key] = { tasa: ht.tasa, ts: htTs, ...ht };
+            }
+          }
+        }
+      });
+      const historicalRates = Object.values(bestRates);
+      if (historicalRates.length > 0) ratesToUse = historicalRates;
+    }
+
+    const convertir = (valor, monedaOrigen, monedaDestino) => {
+      if (!valor || isNaN(valor)) return 0;
+      if (monedaOrigen === monedaDestino) return valor;
+      const tasaUSD = ratesToUse.find(t => t.moneda_origen === 'USD' && t.moneda_destino === 'VES')?.tasa || 1;
+      const tasaEUR = ratesToUse.find(t => t.moneda_origen === 'EUR' && t.moneda_destino === 'VES')?.tasa || 1;
+
+      let result = 0;
+      if (monedaOrigen === 'USD') {
+        if (monedaDestino === 'VES') result = valor * tasaUSD;
+        if (monedaDestino === 'EUR') result = valor * (tasaUSD / tasaEUR);
+      } else if (monedaOrigen === 'EUR') {
+        if (monedaDestino === 'VES') result = valor * tasaEUR;
+        if (monedaDestino === 'USD') result = valor * (tasaEUR / tasaUSD);
+      } else if (monedaOrigen === 'VES') {
+        if (monedaDestino === 'USD') result = valor / tasaUSD;
+        if (monedaDestino === 'EUR') result = valor / tasaEUR;
+      }
+      return result;
+    };
+
+    // 1. Calcular Balances de Billeteras con saldo inicial derivado + movimientos históricos
+    billeteras.forEach(bill => {
+      const allMovsForBill = movimientos.filter(m => m.billetera_id === bill.id);
+      
+      let totalMovs = 0;
+      allMovsForBill.forEach(m => {
+        if (m.categoria === 'Ingreso') totalMovs += m.monto;
+        if (m.categoria === 'Egreso') totalMovs -= m.monto;
+      });
+
+      const initialBalance = bill.balance - totalMovs;
+
+      let pastMovs = 0;
+      allMovsForBill.forEach(m => {
+        const movDate = parseToStandardDate(m.fecha);
+        if (movDate && movDate.getTime() <= targetTs) {
+          if (m.categoria === 'Ingreso') pastMovs += m.monto;
+          if (m.categoria === 'Egreso') pastMovs -= m.monto;
+        }
+      });
+
+      const finalBalance = initialBalance + pastMovs;
+      neto += convertir(finalBalance, bill.moneda_abreviatura, monedaSeleccionada);
+    });
+
+    // 2. Calcular Deudas
+    creditos.forEach(cred => {
+      if (!isHistorical) {
+        if (cred.estatus === 'sin pagar') deudas += convertir(cred.monto, cred.moneda, monedaSeleccionada);
+      } else {
+        const createdDate = parseToStandardDate(cred.created_at);
+        if (createdDate) createdDate.setHours(0, 0, 0, 0);
+        const isCreatedBefore = !createdDate || createdDate.getTime() <= targetTs;
+
+        if (isCreatedBefore) {
+          if (cred.estatus === 'sin pagar') {
+            deudas += convertir(cred.monto, cred.moneda, monedaSeleccionada);
+          } else if (cred.movimiento_id) {
+            const movPago = movimientos.find(m => m.id === cred.movimiento_id);
+            const pagoDate = movPago ? parseToStandardDate(movPago.fecha) : null;
+            if (pagoDate) {
+              pagoDate.setHours(23, 59, 59, 999);
+              // Si la fecha de creación fue menor a la fecha de pago y el pago se realizó DESPUÉS de la fecha consultada,
+              // entonces en la fecha consultada la deuda seguía activa.
+              if (pagoDate.getTime() > targetTs) {
+                deudas += convertir(cred.monto, cred.moneda, monedaSeleccionada);
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // 3. Calcular Por Cobrar
+    cobranzas.forEach(cob => {
+      if (!isHistorical) {
+        if (cob.estatus === 'sin cobrar') porCobrar += convertir(cob.monto, cob.moneda, monedaSeleccionada);
+      } else {
+        const createdDate = parseToStandardDate(cob.created_at);
+        if (createdDate) createdDate.setHours(0, 0, 0, 0);
+        const isCreatedBefore = !createdDate || createdDate.getTime() <= targetTs;
+
+        if (isCreatedBefore) {
+          if (cob.estatus === 'sin cobrar') {
+            porCobrar += convertir(cob.monto, cob.moneda, monedaSeleccionada);
+          } else if (cob.movimiento_id) {
+            const movCobro = movimientos.find(m => m.id === cob.movimiento_id);
+            const cobroDate = movCobro ? parseToStandardDate(movCobro.fecha) : null;
+            if (cobroDate) {
+              cobroDate.setHours(23, 59, 59, 999);
+              // Si el cobro se realizó DESPUÉS de la fecha consultada, en esa fecha aún estaba por cobrar
+              if (cobroDate.getTime() > targetTs) {
+                porCobrar += convertir(cob.monto, cob.moneda, monedaSeleccionada);
+              }
+            }
+          }
+        }
+      }
+    });
+
+    return { neto, deudas, porCobrar, total: neto - deudas + porCobrar };
+  }, [billeteras, creditos, cobranzas, movimientos, historialTasas, tasas, monedaSeleccionada, selectedDateOption]);
 
   return (
-    <ScrollView 
-      showsVerticalScrollIndicator={false} 
+    <ScrollView
+      showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.scrollPadding}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />
@@ -117,9 +269,25 @@ export default function DashboardView({ isDark, user, onNavigate }) {
         <Text style={[styles.greeting, { color: theme.textSecondary, fontFamily: Fonts.regular }]}>
           Hola, {user?.usuario || 'Usuario'} 👋
         </Text>
-        <Text style={[styles.headerTitle, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
-          Resumen Financiero
-        </Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={[styles.headerTitle, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
+            Resumen Financiero
+          </Text>
+          <TouchableOpacity
+            style={[styles.dateSelector, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F0F0F0' }]}
+            onPress={() => {
+              setIsCustomDateMode(false);
+              setCustomDateInput('');
+              setShowDateModal(true);
+            }}
+          >
+            <Ionicons name="calendar-outline" size={14} color={theme.textPrimary} style={{ marginRight: 6 }} />
+            <Text style={{ color: theme.textPrimary, fontFamily: Fonts.medium, fontSize: 12 }}>
+              {selectedDateOption}
+            </Text>
+            <Ionicons name="chevron-down" size={14} color={theme.textSecondary} style={{ marginLeft: 4 }} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Selector de Moneda */}
@@ -177,7 +345,7 @@ export default function DashboardView({ isDark, user, onNavigate }) {
           </Text>
         </View>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => onNavigate && onNavigate('creditos', { initialView: 'cobranza' })}
           style={[styles.detailCard, { backgroundColor: theme.cardBackground, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}
@@ -196,7 +364,7 @@ export default function DashboardView({ isDark, user, onNavigate }) {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity 
+      <TouchableOpacity
         activeOpacity={0.8}
         onPress={() => onNavigate && onNavigate('creditos', { initialView: 'creditos' })}
         style={[styles.detailCard, { width: '100%', marginBottom: Spacing.xl, backgroundColor: theme.cardBackground, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}
@@ -213,6 +381,120 @@ export default function DashboardView({ isDark, user, onNavigate }) {
           <Ionicons name="chevron-forward" size={14} color={theme.textSecondary} />
         </View>
       </TouchableOpacity>
+
+      {/* MODAL DE SELECTOR DE FECHA */}
+      <Modal
+        visible={showDateModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDateModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.cardBackground }]}>
+            <Text style={[styles.modalTitle, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
+              {isCustomDateMode ? 'Fecha Personalizada' : 'Consultar Patrimonio al:'}
+            </Text>
+
+            {!isCustomDateMode ? (
+              <View>
+                {['Hoy', 'Ayer', 'Hace 7 días', 'Hace 30 días'].map((opcion) => (
+                  <TouchableOpacity
+                    key={opcion}
+                    style={[
+                      styles.modalOption,
+                      selectedDateOption === opcion && { backgroundColor: theme.accent + '20' }
+                    ]}
+                    onPress={() => {
+                      setSelectedDateOption(opcion);
+                      setShowDateModal(false);
+                    }}
+                  >
+                    <Text style={[
+                      styles.modalOptionText,
+                      { color: selectedDateOption === opcion ? theme.accent : theme.textPrimary, fontFamily: selectedDateOption === opcion ? Fonts.bold : Fonts.regular }
+                    ]}>
+                      {opcion}
+                    </Text>
+                    {selectedDateOption === opcion && <Ionicons name="checkmark-circle" size={20} color={theme.accent} />}
+                  </TouchableOpacity>
+                ))}
+
+                <TouchableOpacity
+                  style={styles.modalOption}
+                  onPress={() => setIsCustomDateMode(true)}
+                >
+                  <Text style={[styles.modalOptionText, { color: theme.textPrimary, fontFamily: Fonts.regular }]}>
+                    Fecha Personalizada...
+                  </Text>
+                  <Ionicons name="calendar" size={20} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={{ marginBottom: Spacing.md }}>
+                <Text style={{ color: theme.textSecondary, fontFamily: Fonts.regular, fontSize: 13, marginBottom: 8, textAlign: 'center' }}>
+                  Ingresa la fecha (DD/MM/YYYY)
+                </Text>
+                <TextInput
+                  style={[styles.customDateInput, { color: theme.textPrimary, borderColor: theme.inputBorder }]}
+                  placeholder="Ej: 15/07/2026"
+                  placeholderTextColor={theme.textSecondary}
+                  keyboardType="number-pad"
+                  value={customDateInput}
+                  onChangeText={(text) => {
+                    let cleaned = text.replace(/[^0-9]/g, '');
+                    let formatted = cleaned;
+                    if (cleaned.length > 2) {
+                      formatted = cleaned.substring(0, 2) + '/' + cleaned.substring(2);
+                    }
+                    if (cleaned.length > 4) {
+                      formatted = formatted.substring(0, 5) + '/' + cleaned.substring(4, 8);
+                    }
+                    setCustomDateInput(formatted);
+                  }}
+                  maxLength={10}
+                />
+
+                <TouchableOpacity
+                  style={[styles.applyCustomBtn, { backgroundColor: theme.accent }]}
+                  onPress={() => {
+                    if (customDateInput.length !== 10) {
+                      Alert.alert('Error', 'Ingresa una fecha completa válida (DD/MM/YYYY).');
+                      return;
+                    }
+                    const parts = customDateInput.split('/');
+                    const d = parseInt(parts[0], 10);
+                    const m = parseInt(parts[1], 10);
+                    const y = parseInt(parts[2], 10);
+                    if (isNaN(d) || isNaN(m) || isNaN(y) || d < 1 || d > 31 || m < 1 || m > 12 || y < 2000 || y > 2100) {
+                      Alert.alert('Error', 'La fecha ingresada no es válida.');
+                      return;
+                    }
+                    setSelectedDateOption(customDateInput);
+                    setShowDateModal(false);
+                  }}
+                >
+                  <Text style={{ color: '#FFF', fontFamily: Fonts.bold }}>Aplicar Fecha</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={[styles.modalCloseBtn, { borderColor: theme.inputBorder }]}
+              onPress={() => {
+                if (isCustomDateMode) {
+                  setIsCustomDateMode(false);
+                } else {
+                  setShowDateModal(false);
+                }
+              }}
+            >
+              <Text style={{ color: theme.textSecondary, fontFamily: Fonts.medium }}>
+                {isCustomDateMode ? 'Volver' : 'Cancelar'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
     </ScrollView>
   );
@@ -328,5 +610,66 @@ const styles = StyleSheet.create({
   cardActionText: {
     fontSize: 12,
     fontFamily: Fonts.medium,
+  },
+  dateSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  modalContent: {
+    width: '80%',
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+  },
+  modalTitle: {
+    fontSize: 16,
+    marginBottom: Spacing.md,
+    textAlign: 'center',
+  },
+  modalOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: BorderRadius.sm,
+    marginBottom: 8,
+  },
+  modalOptionText: {
+    fontSize: 14,
+  },
+  modalCloseBtn: {
+    marginTop: Spacing.md,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderRadius: BorderRadius.sm,
+    alignItems: 'center',
+  },
+  customDateInput: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: Spacing.md,
+    fontFamily: Fonts.medium,
+  },
+  applyCustomBtn: {
+    paddingVertical: 12,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
   },
 });

@@ -17,6 +17,7 @@ import BilleterasView from './admin/BilleterasView';
 import MovimientosView from './admin/MovimientosView';
 import CreditoCobranzaView from './admin/CreditoCobranzaView';
 import TasasCambiariasView from './admin/TasasCambiariasView';
+import EstadisticasView from './admin/EstadisticasView';
 
 export default function MainScreen() {
   const colorScheme = useColorScheme();
@@ -34,6 +35,7 @@ export default function MainScreen() {
   const [movimientosInitialView, setMovimientosInitialView] = useState('menu');
   const [movimientosFilter, setMovimientosFilter] = useState('');
   const [creditosInitialView, setCreditosInitialView] = useState('menu');
+  const [estadisticasInitialView, setEstadisticasInitialView] = useState('gastos');
 
   // Animaciones de transición
   const contentFade = useRef(new Animated.Value(1)).current;
@@ -70,49 +72,58 @@ export default function MainScreen() {
     }
   };
 
-  const changeTab = (tabId, params = {}) => {
-    if (tabId === 'opciones') {
+  const changeTab = (tab, params = {}) => {
+    if (tab === 'opciones') {
       openOptionsModal();
       return;
     }
 
-    if (tabId === 'movimientos') {
-      setMovimientosInitialView(params.initialView || 'menu');
-      setMovimientosFilter(params.filter || '');
+    if (tab === activeTab) {
+      if (tab === 'movimientos') {
+        if (params.initialView) setMovimientosInitialView(params.initialView);
+        if (params.filter !== undefined) setMovimientosFilter(params.filter);
+      }
+      if (tab === 'creditos') {
+        if (params.initialView) setCreditosInitialView(params.initialView);
+      }
+      if (tab === 'estadisticas') {
+        if (params.initialView) setEstadisticasInitialView(params.initialView);
+      }
+      return;
     }
-
-    if (tabId === 'creditos') {
-      setCreditosInitialView(params.initialView || 'menu');
-    }
-
-    if (tabId === activeTab) return;
-
-    // Transición suave entre vistas
+    
+    // Animación de salida
     Animated.parallel([
-      Animated.timing(contentFade, {
-        toValue: 0,
-        duration: 120,
-        useNativeDriver: true,
-      }),
-      Animated.timing(contentSlide, {
-        toValue: 15,
-        duration: 120,
-        useNativeDriver: true,
-      }),
+      Animated.timing(contentFade, { toValue: 0, duration: 150, useNativeDriver: true }),
+      Animated.timing(contentSlide, { toValue: 10, duration: 150, useNativeDriver: true })
     ]).start(() => {
-      setActiveTab(tabId);
+      setActiveTab(tab);
+      
+      // Aplicar params para vistas con sub-navegación
+      if (tab === 'movimientos') {
+        if (params.initialView) setMovimientosInitialView(params.initialView);
+        if (params.filter !== undefined) setMovimientosFilter(params.filter);
+      } else {
+        setMovimientosInitialView('menu');
+        setMovimientosFilter('');
+      }
+      
+      if (tab === 'creditos') {
+        if (params.initialView) setCreditosInitialView(params.initialView);
+      } else {
+        setCreditosInitialView('menu');
+      }
+
+      if (tab === 'estadisticas') {
+        if (params.initialView) setEstadisticasInitialView(params.initialView);
+      } else {
+        setEstadisticasInitialView('gastos');
+      }
+      
+      // Animación de entrada
       Animated.parallel([
-        Animated.timing(contentFade, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.spring(contentSlide, {
-          toValue: 0,
-          tension: 60,
-          friction: 8,
-          useNativeDriver: true,
-        }),
+        Animated.timing(contentFade, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.timing(contentSlide, { toValue: 0, duration: 200, useNativeDriver: true })
       ]).start();
     });
   };
@@ -171,14 +182,11 @@ export default function MainScreen() {
         return 'Dashboard';
       case 'billeteras':
         return 'Billeteras';
-      case 'movimientos':
-        return 'Movimientos';
-      case 'creditos':
-        return 'Crédito y Cobranza';
-      case 'tasas':
-        return 'Tasas Cambiarias';
-      default:
-        return 'Dashboard';
+      case 'movimientos': return 'Movimientos';
+      case 'creditos': return 'Cuentas Pendientes';
+      case 'tasas': return 'Tasas Cambiarias';
+      case 'estadisticas': return 'Estadísticas';
+      default: return 'Dashboard';
     }
   };
 
@@ -238,6 +246,13 @@ export default function MainScreen() {
         )}
         {activeTab === 'tasas' && (
           <TasasCambiariasView isDark={isDark} />
+        )}
+        {activeTab === 'estadisticas' && (
+          <EstadisticasView 
+            isDark={isDark} 
+            userId={user?.id}
+            initialView={estadisticasInitialView}
+          />
         )}
       </Animated.View>
 
