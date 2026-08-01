@@ -252,6 +252,7 @@ export default function MainScreen() {
             isDark={isDark} 
             userId={user?.id}
             initialView={estadisticasInitialView}
+            onBackMenu={() => changeTab('dashboard')}
           />
         )}
       </Animated.View>

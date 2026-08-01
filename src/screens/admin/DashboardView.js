@@ -376,11 +376,79 @@ export default function DashboardView({ isDark, user, onNavigate }) {
         <Text style={[styles.detailAmount, { color: '#EF4444', fontFamily: Fonts.bold }]}>
           {formatCurrencyVE(patrimonioData.deudas)} <Text style={{ fontSize: 12 }}>{monedaSeleccionada}</Text>
         </Text>
-        <View style={styles.cardActionRow}>
-          <Text style={[styles.cardActionText, { color: theme.textSecondary }]}>Administrar deudas</Text>
-          <Ionicons name="chevron-forward" size={14} color={theme.textSecondary} />
-        </View>
       </TouchableOpacity>
+
+      {/* SECCIÓN DE ESTADÍSTICAS Y GRÁFICOS */}
+      <View style={styles.statsSection}>
+        <View style={styles.statsSectionHeader}>
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
+            Estadísticas y Gráficos
+          </Text>
+          <Text style={[styles.sectionSubtitle, { color: theme.textSecondary, fontFamily: Fonts.regular }]}>
+            Análisis visual de tus finanzas
+          </Text>
+        </View>
+
+        {/* 1. Gráfico de Movimientos (Gastos) */}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => onNavigate && onNavigate('estadisticas', { initialView: 'gastos' })}
+          style={[styles.statsCard, { backgroundColor: theme.cardBackground, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}
+        >
+          <View style={[styles.statsIconBox, { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.1)' }]}>
+            <Ionicons name="pie-chart-outline" size={24} color="#EF4444" />
+          </View>
+          <View style={styles.statsContent}>
+            <Text style={[styles.statsCardTitle, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
+              Gráfico de Movimientos (Gastos)
+            </Text>
+            <Text style={[styles.statsCardDesc, { color: theme.textSecondary, fontFamily: Fonts.regular }]}>
+              Distribución por tipo de movimiento en barras o pizza con leyenda
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+        </TouchableOpacity>
+
+        {/* 2. Gráfico de Ingresos */}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => onNavigate && onNavigate('estadisticas', { initialView: 'ingresos' })}
+          style={[styles.statsCard, { backgroundColor: theme.cardBackground, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}
+        >
+          <View style={[styles.statsIconBox, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.1)' }]}>
+            <Ionicons name="trending-up-outline" size={24} color="#10B981" />
+          </View>
+          <View style={styles.statsContent}>
+            <Text style={[styles.statsCardTitle, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
+              Gráfico de Ingresos
+            </Text>
+            <Text style={[styles.statsCardDesc, { color: theme.textSecondary, fontFamily: Fonts.regular }]}>
+              Visualización de fuentes de ingresos en barras o pizza con leyenda
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+        </TouchableOpacity>
+
+        {/* 3. Gráficos de Billeteras */}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => onNavigate && onNavigate('estadisticas', { initialView: 'billeteras' })}
+          style={[styles.statsCard, { backgroundColor: theme.cardBackground, borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}
+        >
+          <View style={[styles.statsIconBox, { backgroundColor: isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.1)' }]}>
+            <Ionicons name="bar-chart-outline" size={24} color="#3B82F6" />
+          </View>
+          <View style={styles.statsContent}>
+            <Text style={[styles.statsCardTitle, { color: theme.textPrimary, fontFamily: Fonts.bold }]}>
+              Gráficos de Billeteras
+            </Text>
+            <Text style={[styles.statsCardDesc, { color: theme.textSecondary, fontFamily: Fonts.regular }]}>
+              Billetera con más movimiento y análisis de estabilidad
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+        </TouchableOpacity>
+      </View>
 
       {/* MODAL DE SELECTOR DE FECHA */}
       <Modal
@@ -671,5 +739,50 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: BorderRadius.md,
     alignItems: 'center',
+  },
+  statsSection: {
+    marginBottom: Spacing.xl,
+  },
+  statsSectionHeader: {
+    marginBottom: Spacing.md,
+  },
+  sectionTitle: {
+    fontSize: 18,
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  statsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  statsIconBox: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: Spacing.md,
+  },
+  statsContent: {
+    flex: 1,
+  },
+  statsCardTitle: {
+    fontSize: 15,
+    marginBottom: 2,
+  },
+  statsCardDesc: {
+    fontSize: 12,
+    lineHeight: 16,
   },
 });

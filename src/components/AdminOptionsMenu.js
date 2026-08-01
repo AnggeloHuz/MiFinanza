@@ -158,6 +158,29 @@ export default function AdminOptionsMenu({
                 </View>
               </Pressable>
 
+              {/* BOTÓN ESTADÍSTICAS Y GRÁFICOS */}
+              <Pressable
+                onPress={() => onNavigateOption && onNavigateOption('estadisticas')}
+                style={({ pressed }) => [
+                  styles.optionItem,
+                  {
+                    backgroundColor: pressed
+                      ? isDark
+                        ? 'rgba(255,255,255,0.1)'
+                        : 'rgba(0,0,0,0.05)'
+                      : 'transparent',
+                    borderColor: theme.inputBorder,
+                  },
+                ]}
+              >
+                <View style={[styles.optionIconBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F0F0F0' }]}>
+                  <Ionicons name="pie-chart-outline" size={20} color={theme.textPrimary} />
+                  <Text style={[styles.optionText, { color: theme.textPrimary, fontFamily: Fonts.medium }]}>
+                    Estadísticas y Gráficos
+                  </Text>
+                </View>
+              </Pressable>
+
               {/* BOTÓN CERRAR SESIÓN */}
               <Pressable
                 onPress={onLogout}
